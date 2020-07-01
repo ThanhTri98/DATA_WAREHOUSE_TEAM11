@@ -28,6 +28,9 @@ public class DataWarehouse {
 	public DataWarehouse() {
 		d_process = new DataProcess();
 	}
+	public static void main(String[] args) {
+		DataWarehouse d_warehouse = new DataWarehouse();
+	}
 
 	/*
 	 * I. Tải file về thư mục C:\WAREHOUSE\SCP dùng SCP ### 1. Tải hoàn tất thì quét
