@@ -27,8 +27,9 @@ public class DataProcess {
 		StringTokenizer stoken = new StringTokenizer(value, delim);
 		int countToken = stoken.countTokens();
 		String lines = "(";
+		String token = "";
 		for (int j = 0; j < countToken; j++) {
-			String token = stoken.nextToken();
+			token = stoken.nextToken();
 			lines += (j == countToken - 1) ? '"' + token.trim() + '"' + ")," : '"' + token.trim() + '"' + ",";
 			values += lines;
 			lines = "";
@@ -36,16 +37,29 @@ public class DataProcess {
 		return values;
 	}
 
-	public String readValuesTXT(File s_file, String delim, String f_name_logs) {
+	public String readValuesTXT(File s_file, int id_log, int count_field) {
+		if (!s_file.exists()) {
+			return null;
+		}
 		String values = "";
+		String delim = "|"; // hoặc \t
 		try {
 			BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(s_file)));
 			String line = bReader.readLine();
+			if (line.indexOf("\t") != -1) {
+				delim = "\t";
+			}
+			// Kiểm tra xem tổng số trường trong file có đúng format
+			if (new StringTokenizer(line, delim).countTokens() != count_field) {
+				bReader.close();
+				return null;
+			}
 			if (Pattern.matches(NUMBER_REGEX, line.split(delim)[0])) { // Kiem tra xem co phan header khong
-				values += readLines(line + delim + f_name_logs, delim);
+				values += readLines(line + delim + id_log, delim);
 			}
 			while ((line = bReader.readLine()) != null) {
-				values += readLines(line + delim + f_name_logs, delim);
+//				System.out.println(line +"2"+ delim + id_log);
+				values += readLines(line +" "+ delim + id_log, delim);
 			}
 			bReader.close();
 			return values.substring(0, values.length() - 1);
@@ -58,11 +72,11 @@ public class DataProcess {
 
 	public static void main(String[] args) {
 		DataProcess dp = new DataProcess();
-		System.out.println(dp.readValuesXLSX(new File("C:\\WAREHOUSE\\IMPORT_DIR\\sinhvien_sang_nhom11.xlsx"),"a.txt",11));
+		System.out.println(dp.readValuesTXT(new File("C:\\WAREHOUSE\\ERROR_DIR\\sinhvien_sang_nhom1.txt"), 1, 11));
+//		System.out.println(dp.readValuesXLSX(new File("C:\\WAREHOUSE\\IMPORT_DIR\\sinhvien_sang_nhom11.xlsx"),1,11));
 	}
 
-
-	public String readValuesXLSX(File s_file, String f_name_logs, int countCell) {
+	public String readValuesXLSX(File s_file, int id_log, int countCell) {
 		String values = "";
 		String value = "";
 		String delim_xlsx = "|";
@@ -121,8 +135,7 @@ public class DataProcess {
 				if (row.getLastCellNum() == countCell - 1) {
 					value += " |";
 				}
-				System.out.println(value);
-				values += readLines(value + f_name_logs, delim_xlsx);
+				values += readLines(value + id_log, delim_xlsx);
 				value = "";
 			}
 			workBooks.close();

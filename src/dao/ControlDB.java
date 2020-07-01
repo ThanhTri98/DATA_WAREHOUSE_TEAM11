@@ -31,7 +31,6 @@ public class ControlDB {
 			pst = ConnectionDB.createConnection(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS)
 					.prepareStatement(sql);
 			rs = pst.executeQuery();
-			rs.next();
 			conf = conf.getConfiguration(rs);
 			return conf;
 		} catch (SQLException e) {

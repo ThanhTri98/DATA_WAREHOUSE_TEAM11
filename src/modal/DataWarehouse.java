@@ -44,6 +44,7 @@ public class DataWarehouse {
 	}
 	public static void main(String[] args) {
 		DataWarehouse d_warehouse = new DataWarehouse();
+		d_warehouse.checkFileStatus();
 	}
 
 	/*
@@ -80,7 +81,7 @@ public class DataWarehouse {
 	//II funcCheckFileStatus -> extract
 	public void checkFileStatus() {
 		ResultSet allRecordLogs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-				ControlDB.CONTROL_DB_PASS, "logs");
+				ControlDB.CONTROL_DB_PASS, "LOGS");
 		try {
 			File file = null;
 			String file_name=null;
@@ -101,18 +102,18 @@ public class DataWarehouse {
 							: file.getPath().endsWith(".txt") ? EXT_TEXT : EXT_CSV;
 					if (!file.exists())
 						break;
+					StringTokenizer count_Field = new StringTokenizer(COLUMN_LIST, DELIM);
 					if (file.getPath().endsWith(EXT_EXCEL)) {
-						StringTokenizer str = new StringTokenizer(COLUMN_LIST, DELIM);
-						values = d_process.readValuesXLSX(file, file.getName(), str.countTokens());
+						values = d_process.readValuesXLSX(file, file_id, count_Field.countTokens());
 					} else if (file.getPath().endsWith(EXT_TEXT)) {
-						values = d_process.readValuesTXT(file, DELIM, file.getName());
+						values = d_process.readValuesTXT(file, file_id,count_Field.countTokens());
 					} else if (file.getPath().endsWith(EXT_CSV)) {
 						// Tu Tu lam
 					}
 					try {
 						// extract to db_staging
 						if (ControlDB.insertValues(STAGING_DB_NAME, STAGING_USER, STAGING_PASS, STAGING_TABLE,
-								COLUMN_LIST + ",file_name", values)) {
+								COLUMN_LIST + ",id_log", values)) {
 							// change status in table logs
 							ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
 									ControlDB.CONTROL_DB_PASS, file_id, "TR");
