@@ -1,5 +1,19 @@
 package modal;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Iterator;
+import java.util.StringTokenizer;
+
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
 import dao.ControlDB;
 
 public class DataWarehouse {
@@ -64,5 +78,105 @@ public class DataWarehouse {
 
 //I. funcDownload, funcInsertLog
 	//II funcCheckFileStatus -> extract
-	
+	public void checkFileStatus() {
+		ResultSet allRecordLogs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+				ControlDB.CONTROL_DB_PASS, "logs");
+		try {
+			File file = null;
+			String file_name=null;
+			String file_status=null;
+			int file_id=-999;
+			String extention;
+			while (allRecordLogs.next()) {
+				file_name = allRecordLogs.getString("file_name");
+				file_status=allRecordLogs.getString("file_status");
+				file_id =allRecordLogs.getInt("id");
+				if (file_status.equals("ER")) {
+					String values = "";
+					// Tien hanh ghi toàn bộ nội dung của file đó vào table student (trong DB
+					// db_staging)
+					// -> đồng thời chuyển trạng thái file đó thành TR
+					file = new File(IMPORT_DIR + File.separator + file_name);
+					extention = file.getPath().endsWith(".xlsx") ? EXT_EXCEL
+							: file.getPath().endsWith(".txt") ? EXT_TEXT : EXT_CSV;
+					if (!file.exists())
+						break;
+					if (file.getPath().endsWith(EXT_EXCEL)) {
+						StringTokenizer str = new StringTokenizer(COLUMN_LIST, DELIM);
+						values = d_process.readValuesXLSX(file, file.getName(), str.countTokens());
+					} else if (file.getPath().endsWith(EXT_TEXT)) {
+						values = d_process.readValuesTXT(file, DELIM, file.getName());
+					} else if (file.getPath().endsWith(EXT_CSV)) {
+						// Tu Tu lam
+					}
+					try {
+						// extract to db_staging
+						if (ControlDB.insertValues(STAGING_DB_NAME, STAGING_USER, STAGING_PASS, STAGING_TABLE,
+								COLUMN_LIST + ",file_name", values)) {
+							// change status in table logs
+							ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+									ControlDB.CONTROL_DB_PASS, file_id, "TR");
+							ControlDB.updateCountLines(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+									ControlDB.CONTROL_DB_PASS, file_id, countLines(file, extention));
+							
+						}
+					} catch (SQLException e) {
+						ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+								ControlDB.CONTROL_DB_PASS, file_id, "ERR");
+						continue;
+					}
+
+				} else if (allRecordLogs.getString("file_status").equals("TR")) {
+
+				} else if (allRecordLogs.getString("file_status").equals("SU")) {
+
+				}
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				allRecordLogs.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	private int countLines(File file, String extention) {
+		int result = 0;
+		XSSFWorkbook workBooks = null;
+		try {
+			if (extention.indexOf(EXT_TEXT) != -1) {
+				BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(file)));
+				String line;
+				while ((line = bReader.readLine()) != null) {
+					if (!line.trim().isEmpty()) {
+						result++;
+					}
+				}
+				bReader.close();
+			} else if (extention.indexOf(EXT_EXCEL) != -1) {
+				workBooks = new XSSFWorkbook(file);
+				XSSFSheet sheet = workBooks.getSheetAt(0);
+				Iterator<Row> rows = sheet.iterator();
+				rows.next();
+				while (rows.hasNext()) {
+					rows.next();
+					result++;
+				}
+			}
+			return result;
+		} catch (IOException | org.apache.poi.openxml4j.exceptions.InvalidFormatException e) {
+			e.printStackTrace();
+			return 0;
+		} finally {
+			if (workBooks != null) {
+				try {
+					workBooks.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
 }
