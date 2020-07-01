@@ -127,7 +127,51 @@ public class ControlDB {
 //
 		}
 	}
-
+	public static boolean updateFileStatus(String db_name, String user_name, String password, int id_logs,
+			String file_status) {
+		sql = "UPDATE LOGS SET FILE_STATUS=?,FILE_TIMESTAMP=NOW() WHERE ID=?";
+		try {
+			pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
+			pst.setString(1, file_status);
+			pst.setInt(2, id_logs);
+			return pst.executeUpdate() > 0;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return false;
+		} finally {
+			try {
+				if (pst != null)
+					pst.close();
+				if (rs != null)
+					rs.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	public static boolean updateCountLines(String db_name, String user_name, String password, int id_logs,
+			int count) {
+		sql = "UPDATE LOGS SET STAGING_LOAD_COUNT=?,FILE_TIMESTAMP=NOW() WHERE ID=?";
+		try {
+			pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
+			pst.setInt(1, count);
+//			pst.setString(2, dtf.format(now));
+			pst.setInt(2, id_logs);
+			return pst.executeUpdate() > 0;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return false;
+		} finally {
+			try {
+				if (pst != null)
+					pst.close();
+				if (rs != null)
+					rs.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+	}
 //	public boolean tableExist(String table_name) {
 //	try {
 //		DatabaseMetaData dbm = ConnectionDB.createConnection(this.target_db_name).getMetaData();
