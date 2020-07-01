@@ -29,11 +29,7 @@ public class DataProcess {
 		String lines = "(";
 		for (int j = 0; j < countToken; j++) {
 			String token = stoken.nextToken();
-			if (Pattern.matches(NUMBER_REGEX, token)) {
-				lines += (j == countToken - 1) ? token.trim() + ")," : token.trim() + ",";
-			} else {
-				lines += (j == countToken - 1) ? "'" + token.trim() + "')," : "'" + token.trim() + "',";
-			}
+			lines += (j == countToken - 1) ? '"' + token.trim() + '"' + ")," : '"' + token.trim() + '"' + ",";
 			values += lines;
 			lines = "";
 		}
@@ -62,10 +58,11 @@ public class DataProcess {
 
 	public static void main(String[] args) {
 		DataProcess dp = new DataProcess();
-		System.out.println(dp.readValuesXLSX(new File("C:\\WAREHOUSE\\IMPORT_DIR\\sinhvien_sang_nhom11.xlsx")));
+		System.out.println(dp.readValuesXLSX(new File("C:\\WAREHOUSE\\IMPORT_DIR\\sinhvien_sang_nhom11.xlsx"),"a.txt",11));
 	}
 
-	public String readValuesXLSX(File s_file) {
+
+	public String readValuesXLSX(File s_file, String f_name_logs, int countCell) {
 		String values = "";
 		String value = "";
 		String delim_xlsx = "|";
@@ -81,6 +78,11 @@ public class DataProcess {
 			}
 			while (rows.hasNext()) {
 				Row row = rows.next();
+				// Kiem tra xem file co dung format hay chua dua vao so cell trong file
+				if (row.getLastCellNum() < countCell - 1 || row.getLastCellNum() > countCell) {
+					workBooks.close();
+					return null;
+				}
 				Iterator<Cell> cells = row.cellIterator();
 				while (cells.hasNext()) {
 					Cell cell = cells.next();
@@ -97,13 +99,30 @@ public class DataProcess {
 					case STRING:
 						value += cell.getStringCellValue() + delim_xlsx;
 						break;
+					case FORMULA:
+						switch (cell.getCachedFormulaResultType()) {
+						case NUMERIC:
+							value += (long) cell.getNumericCellValue() + delim_xlsx;
+							break;
+						case STRING:
+							value += cell.getStringCellValue() + delim_xlsx;
+							break;
+						default:
+							value += " " + delim_xlsx;
+							break;
+						}
+						break;
 					case BLANK:
 					default:
-						value += delim_xlsx + " " + delim_xlsx;
+						value += " " + delim_xlsx;
 						break;
 					}
 				}
-				values += readLines(value, delim_xlsx);
+				if (row.getLastCellNum() == countCell - 1) {
+					value += " |";
+				}
+				System.out.println(value);
+				values += readLines(value + f_name_logs, delim_xlsx);
 				value = "";
 			}
 			workBooks.close();
