@@ -15,6 +15,7 @@ import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import dao.ControlDB;
+import util.FileDownLib;
 
 public class DataWarehouse {
 	static final String EXT_TEXT = ".txt";
@@ -42,6 +43,7 @@ public class DataWarehouse {
 	public DataWarehouse() {
 		d_process = new DataProcess();
 	}
+
 	public static void main(String[] args) {
 		DataWarehouse d_warehouse = new DataWarehouse();
 	}
@@ -77,25 +79,69 @@ public class DataWarehouse {
 	 */
 
 //I. funcDownload, funcInsertLog
-	//II funcCheckFileStatus -> extract
+	public void downloadFile() {
+		ResultSet rs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+				ControlDB.CONTROL_DB_PASS, "scp");
+		SCP scp = new SCP().getSCP(rs);
+		FileDownLib.fileDownload(scp.getHostName(), scp.getPort(), scp.getUserName(), scp.getPassword(),
+				scp.getRemotePath(), scp.getLocalPath(), scp.getSyncMustMatch());
+		System.out.println("DownFile success.");
+		// Kiểm tra file down xuống có lỗi hay không
+//		if () {}
+		insertLog(scp.getLocalPath(), "ER");
+		try {
+			rs.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public void insertLog(String folder, String file_status) {
+		File fd = new File(folder);
+		if (!fd.exists())
+			return;
+		String column_list_log = "file_name,config_id,file_status,staging_load_count,file_timestamp";
+		StringBuilder value = new StringBuilder();
+		File[] listFile = fd.listFiles();
+		for (File file : listFile) {
+			if (file.getPath().endsWith(EXT_EXCEL) || file.getPath().endsWith(EXT_TEXT)
+					|| file.getPath().endsWith(EXT_CSV)) {
+				value.append("('" + file.getName() + "'");
+				value.append("," + CONFIG_ID);
+				value.append(",'" + file_status + "'");
+				value.append("," + 0);
+				value.append(",'" + ControlDB.dtf.format(ControlDB.now) + "')");
+				try {
+					ControlDB.insertValues(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+							ControlDB.CONTROL_DB_PASS, "Logs", column_list_log, value.toString());
+					value = new StringBuilder();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
+	// II funcCheckFileStatus -> extract
 	public void checkFileStatus() {
 		ResultSet allRecordLogs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
 				ControlDB.CONTROL_DB_PASS, "logs");
 		try {
 			File file = null;
-			String file_name=null;
-			String file_status=null;
-			int file_id=-999;
+			String file_name = null;
+			String file_status = null;
+			int file_id = -999;
 			String extention;
 			while (allRecordLogs.next()) {
 				file_name = allRecordLogs.getString("file_name");
-				file_status=allRecordLogs.getString("file_status");
-				file_id =allRecordLogs.getInt("id");
+				file_status = allRecordLogs.getString("file_status");
+				file_id = allRecordLogs.getInt("id");
 				if (file_status.equals("ER")) {
 					String values = "";
-					// Tien hanh ghi toàn bộ nội dung của file đó vào table student (trong DB
+					// Tien hanh ghi toÃ n bá»™ ná»™i dung cá»§a file Ä‘Ã³ vÃ o table student (trong
+					// DB
 					// db_staging)
-					// -> đồng thời chuyển trạng thái file đó thành TR
+					// -> Ä‘á»“ng thá»�i chuyá»ƒn tráº¡ng thÃ¡i file Ä‘Ã³ thÃ nh TR
 					file = new File(IMPORT_DIR + File.separator + file_name);
 					extention = file.getPath().endsWith(".xlsx") ? EXT_EXCEL
 							: file.getPath().endsWith(".txt") ? EXT_TEXT : EXT_CSV;
@@ -118,7 +164,7 @@ public class DataWarehouse {
 									ControlDB.CONTROL_DB_PASS, file_id, "TR");
 							ControlDB.updateCountLines(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
 									ControlDB.CONTROL_DB_PASS, file_id, countLines(file, extention));
-							
+
 						}
 					} catch (SQLException e) {
 						ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
@@ -142,6 +188,7 @@ public class DataWarehouse {
 			}
 		}
 	}
+
 	private int countLines(File file, String extention) {
 		int result = 0;
 		XSSFWorkbook workBooks = null;
