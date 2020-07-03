@@ -1,8 +1,11 @@
 package modal;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.sql.ResultSet;
@@ -37,7 +40,9 @@ public class DataWarehouse {
 	static final String STAGING_USER = conf.getStagingUser();
 	static final String STAGING_PASS = conf.getStagingPass();
 	static final String STAGING_TABLE = conf.getStagingTable();
-
+	//logs
+	static final String COLUMN_LIST_LOGS ="file_name,config_id,file_status,staging_load_count,file_timestamp";
+	//
 	DataProcess d_process;
 
 	public DataWarehouse() {
@@ -46,7 +51,7 @@ public class DataWarehouse {
 
 	public static void main(String[] args) {
 		DataWarehouse d_warehouse = new DataWarehouse();
-		d_warehouse.checkFileStatus();
+		d_warehouse.downloadFile();
 	}
 
 	/*
@@ -84,11 +89,14 @@ public class DataWarehouse {
 		ResultSet rs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
 				ControlDB.CONTROL_DB_PASS, "scp");
 		SCP scp = new SCP().getSCP(rs);
-		FileDownLib.fileDownload(scp.getHostName(), scp.getPort(), scp.getUserName(), scp.getPassword(),
+		int success = FileDownLib.fileDownload(scp.getHostName(), scp.getPort(), scp.getUserName(), scp.getPassword(),
 				scp.getRemotePath(), scp.getLocalPath(), scp.getSyncMustMatch());
-		System.out.println("DownFile success.");
-		// Kiểm tra file down xuống có lỗi hay không
-//		if () {}
+		if(success==-1) {
+			//send mail bao loi khong ket noi duoc toi server
+			System.out.println("Connect Fail");
+			return;
+		}
+		System.out.println("download");
 		insertLog(scp.getLocalPath(), "ER");
 		try {
 			rs.close();
@@ -101,7 +109,6 @@ public class DataWarehouse {
 		File fd = new File(folder);
 		if (!fd.exists())
 			return;
-		String column_list_log = "file_name,config_id,file_status,staging_load_count,file_timestamp";
 		StringBuilder value = new StringBuilder();
 		File[] listFile = fd.listFiles();
 		for (File file : listFile) {
@@ -111,14 +118,15 @@ public class DataWarehouse {
 				value.append("," + CONFIG_ID);
 				value.append(",'" + file_status + "'");
 				value.append("," + 0);
-				value.append(",'" + ControlDB.dtf.format(ControlDB.now) + "')");
+				value.append(",NOW())");
 				try {
 					ControlDB.insertValues(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-							ControlDB.CONTROL_DB_PASS, "Logs", column_list_log, value.toString());
+							ControlDB.CONTROL_DB_PASS, "Logs", COLUMN_LIST_LOGS, value.toString());
 					value = new StringBuilder();
 				} catch (SQLException e) {
 					e.printStackTrace();
 				}
+				moveFile(file, IMPORT_DIR);
 			}
 		}
 	}
@@ -139,10 +147,9 @@ public class DataWarehouse {
 				file_id = allRecordLogs.getInt("id");
 				if (file_status.equals("ER")) {
 					String values = "";
-					// Tien hanh ghi toÃ n bá»™ ná»™i dung cá»§a file Ä‘Ã³ vÃ o table student (trong
-					// DB
+					// Tien hanh ghi toàn bộ nội dung của file đó vào table student (trong DB
 					// db_staging)
-					// -> Ä‘á»“ng thá»�i chuyá»ƒn tráº¡ng thÃ¡i file Ä‘Ã³ thÃ nh TR
+					// -> đồng thời chuyển trạng thái file đó thành TR
 					file = new File(IMPORT_DIR + File.separator + file_name);
 					extention = file.getPath().endsWith(".xlsx") ? EXT_EXCEL
 							: file.getPath().endsWith(".txt") ? EXT_TEXT : EXT_CSV;
@@ -152,7 +159,7 @@ public class DataWarehouse {
 					if (file.getPath().endsWith(EXT_EXCEL)) {
 						values = d_process.readValuesXLSX(file, file_id, count_Field.countTokens());
 					} else if (file.getPath().endsWith(EXT_TEXT)) {
-						values = d_process.readValuesTXT(file, file_id,count_Field.countTokens());
+						values = d_process.readValuesTXT(file, file_id, count_Field.countTokens());
 					} else if (file.getPath().endsWith(EXT_CSV)) {
 						// Tu Tu lam
 					}
@@ -170,6 +177,7 @@ public class DataWarehouse {
 					} catch (SQLException e) {
 						ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
 								ControlDB.CONTROL_DB_PASS, file_id, "ERR");
+						moveFile(file, ER_DIR);
 						continue;
 					}
 
@@ -187,6 +195,27 @@ public class DataWarehouse {
 			} catch (SQLException e) {
 				e.printStackTrace();
 			}
+		}
+	}
+
+	private boolean moveFile(File file, String target_dir) {
+		try {
+			BufferedInputStream bReader = new BufferedInputStream(new FileInputStream(file));
+			BufferedOutputStream bWriter = new BufferedOutputStream(
+					new FileOutputStream(target_dir + File.separator + file.getName()));
+			byte[] buff = new byte[1024 * 10];
+			int data = 0;
+			while ((data = bReader.read(buff)) != -1) {
+				bWriter.write(buff, 0, data);
+			}
+			bReader.close();
+			bWriter.close();
+			return true;
+		} catch (IOException e) {
+			e.printStackTrace();
+			return false;
+		} finally {
+			file.delete();
 		}
 	}
 

@@ -14,7 +14,7 @@ public class FileDownLib {
 		}
 	}
 
-	public static void fileDownload(String hostname, int port, String user_name, String password, String remote_Path,
+	public static int fileDownload(String hostname, int port, String user_name, String password, String remote_Path,
 			String local_Path, String regex_Match) {
 		CkSsh ssh = new CkSsh();
 		CkGlobal ck = new CkGlobal();
@@ -22,27 +22,28 @@ public class FileDownLib {
 		boolean success = ssh.Connect(hostname, port);
 		if (success != true) {
 			System.out.println(ssh.lastErrorText());
-			return;
+			return -1;
 		}
 		ssh.put_IdleTimeoutMs(5000);
 		success = ssh.AuthenticatePw(user_name, password);
 		if (success != true) {
 			System.out.println(ssh.lastErrorText());
-			return;
+			return -1;
 		}
 		CkScp scp = new CkScp();
 
 		success = scp.UseSsh(ssh);
 		if (success != true) {
 			System.out.println(scp.lastErrorText());
-			return;
+			return -1;
 		}
 		scp.put_SyncMustMatch(regex_Match);
 		success = scp.SyncTreeDownload(remote_Path, local_Path, 2, false);
 		if (success != true) {
 			System.out.println(scp.lastErrorText());
-			return;
+			return -1;
 		}
 		ssh.Disconnect();
+		return 0;
 	}
 }
