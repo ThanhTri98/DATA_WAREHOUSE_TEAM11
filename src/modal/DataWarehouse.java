@@ -15,6 +15,7 @@ import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import dao.ControlDB;
+import util.FileDownLib;
 
 public class DataWarehouse {
 	static final String EXT_TEXT = ".txt";
@@ -47,36 +48,82 @@ public class DataWarehouse {
 	}
 
 	/*
-	 * I. Tải file về thư mục C:\WAREHOUSE\SCP dùng SCP ### 1. Tải hoàn tất thì quét
-	 * thư mục SCP và ghi log -> file_status = ER -> Move file vừa ghi log vào
-	 * C:\WAREHOUSE\IMPORT_DIR, Kiểm tra file đó đã được import vào hệ thống
-	 * chưa(file_status=TR,SU), nếu tồn tại thì không tải nữa ### 2. Vào bảng Logs
-	 * (trong DB control_db) đọc tất cả records, nếu rcd đó có file_status = ER thì
-	 * ghi toàn bộ nội dung của file đó vào table student (trong DB db_staging) ->
-	 * đồng thời chuyển trạng thái file đó thành TR
+	 * I. Táº£i file vá»� thÆ° má»¥c C:\WAREHOUSE\SCP dÃ¹ng SCP ### 1. Táº£i hoÃ n táº¥t thÃ¬ quÃ©t
+	 * thÆ° má»¥c SCP vÃ  ghi log -> file_status = ER -> Move file vá»«a ghi log vÃ o
+	 * C:\WAREHOUSE\IMPORT_DIR, Kiá»ƒm tra file Ä‘Ã³ Ä‘Ã£ Ä‘Æ°á»£c import vÃ o há»‡ thá»‘ng
+	 * chÆ°a(file_status=TR,SU), náº¿u tá»“n táº¡i thÃ¬ khÃ´ng táº£i ná»¯a ### 2. VÃ o báº£ng Logs
+	 * (trong DB control_db) Ä‘á»�c táº¥t cáº£ records, náº¿u rcd Ä‘Ã³ cÃ³ file_status = ER thÃ¬
+	 * ghi toÃ n bá»™ ná»™i dung cá»§a file Ä‘Ã³ vÃ o table student (trong DB db_staging) ->
+	 * Ä‘á»“ng thá»�i chuyá»ƒn tráº¡ng thÃ¡i file Ä‘Ã³ thÃ nh TR
 	 */
 	/*
-	 * II. Tiến hành tranform dữ liệu ### 1. Vào bảng Logs (trong DB control_db) đọc
-	 * tất cả records, nếu rcd đó có file_status = TR -> vào bảng student (trong DB
-	 * db_staging) đọc tất cả các rcd có trường file_name = file hiện tại có
-	 * file_status = TR xong thì tiến hàng transform dữ liệu ### 2. Sau khi đã
-	 * tranform tất cả các dòng trong file thì lưu lại số dòng đã trans, nếu số dòng
-	 * đã trans = số dòng đọc lên từ file thì chuyển trạng thái file đó thành SU,
-	 * ngược lại thì ERR -> Move các file vào C:\WAREHOUSE\ERROR_DIR???
+	 * II. Tiáº¿n hÃ nh tranform dá»¯ liá»‡u ### 1. VÃ o báº£ng Logs (trong DB control_db) Ä‘á»�c
+	 * táº¥t cáº£ records, náº¿u rcd Ä‘Ã³ cÃ³ file_status = TR -> vÃ o báº£ng student (trong DB
+	 * db_staging) Ä‘á»�c táº¥t cáº£ cÃ¡c rcd cÃ³ trÆ°á»�ng file_name = file hiá»‡n táº¡i cÃ³
+	 * file_status = TR xong thÃ¬ tiáº¿n hÃ ng transform dá»¯ liá»‡u ### 2. Sau khi Ä‘Ã£
+	 * tranform táº¥t cáº£ cÃ¡c dÃ²ng trong file thÃ¬ lÆ°u láº¡i sá»‘ dÃ²ng Ä‘Ã£ trans, náº¿u sá»‘ dÃ²ng
+	 * Ä‘Ã£ trans = sá»‘ dÃ²ng Ä‘á»�c lÃªn tá»« file thÃ¬ chuyá»ƒn tráº¡ng thÃ¡i file Ä‘Ã³ thÃ nh SU,
+	 * ngÆ°á»£c láº¡i thÃ¬ ERR -> Move cÃ¡c file vÃ o C:\WAREHOUSE\ERROR_DIR???
 	 */
 	/*
-	 * III. Tiến hành ghi các file có file_status = SU vào bảng student trong DB
-	 * warehouse ### 1. Vào bảng Logs (trong DB control_db) đọc tất cả các records,
-	 * nếu rcd nào có file_status = SU thì tiến hành move dữ liệu từ bảng student
-	 * (trong DB db_staging) qua bảng student (trong DB warehouse) ### 2. Quá trình
-	 * di chuyển hoàn tất -> Move các file đó vào thư mục C:\WAREHOUSE\SUCCESS_DIR
-	 * -> Kết thúc chu trình.
+	 * III. Tiáº¿n hÃ nh ghi cÃ¡c file cÃ³ file_status = SU vÃ o báº£ng student trong DB
+	 * warehouse ### 1. VÃ o báº£ng Logs (trong DB control_db) Ä‘á»�c táº¥t cáº£ cÃ¡c records,
+	 * náº¿u rcd nÃ o cÃ³ file_status = SU thÃ¬ tiáº¿n hÃ nh move dá»¯ liá»‡u tá»« báº£ng student
+	 * (trong DB db_staging) qua báº£ng student (trong DB warehouse) ### 2. QuÃ¡ trÃ¬nh
+	 * di chuyá»ƒn hoÃ n táº¥t -> Move cÃ¡c file Ä‘Ã³ vÃ o thÆ° má»¥c C:\WAREHOUSE\SUCCESS_DIR
+	 * -> Káº¿t thÃºc chu trÃ¬nh.
 	 * 
-	 * -------Nếu file_status = ERR thì làm lại B1 nhưng thay thư mục SCP thành
+	 * -------Náº¿u file_status = ERR thÃ¬ lÃ m láº¡i B1 nhÆ°ng thay thÆ° má»¥c SCP thÃ nh
 	 * C:\WAREHOUSE\ERROR_DIR
 	 */
 
 //I. funcDownload, funcInsertLog
+	public void downloadFile() {
+		ResultSet rs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+				ControlDB.CONTROL_DB_PASS, "scp");
+		SCP scp = new SCP().getSCP(rs);
+		FileDownLib.fileDownload(scp.getHostName(), scp.getPort(), scp.getUserName(), scp.getPassword(),
+				scp.getRemotePath(), scp.getLocalPath(), scp.getSyncMustMatch());
+		System.out.println("DownFile success.");
+		// Kiểm tra file down xuống có lỗi hay không
+//		if () {}
+		insertLog(scp.getLocalPath(), "ER");
+		try {
+			rs.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public void insertLog(String folder, String file_status) {
+		File fd = new File(folder);
+		if (!fd.exists())
+			return;
+		String column_list_log = "file_name,config_id,file_status,staging_load_count,file_timestamp";
+		StringBuilder value = new StringBuilder();
+		String extention;
+		File[] listFile = fd.listFiles();
+		for (File file : listFile) {
+			if (file.getPath().endsWith(EXT_EXCEL) || file.getPath().endsWith(EXT_TEXT)
+					|| file.getPath().endsWith(EXT_CSV)) {
+				extention = file.getPath().endsWith(".xlsx") ? EXT_EXCEL
+						: file.getPath().endsWith(".txt") ? EXT_TEXT : EXT_CSV;
+				value.append("('" + file.getName() + "'");
+				value.append("," + CONFIG_ID);
+				value.append(",'" + file_status + "'");
+				value.append("," + countLines(file, extention));
+				value.append(",'" + ControlDB.dtf.format(ControlDB.now) + "')");
+				try {
+					ControlDB.insertValues(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+							ControlDB.CONTROL_DB_PASS, "Logs", column_list_log, value.toString());
+					value = new StringBuilder();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
 	//II funcCheckFileStatus -> extract
 	public void checkFileStatus() {
 		ResultSet allRecordLogs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
@@ -93,9 +140,9 @@ public class DataWarehouse {
 				file_id =allRecordLogs.getInt("id");
 				if (file_status.equals("ER")) {
 					String values = "";
-					// Tien hanh ghi toàn bộ nội dung của file đó vào table student (trong DB
+					// Tien hanh ghi toÃ n bá»™ ná»™i dung cá»§a file Ä‘Ã³ vÃ o table student (trong DB
 					// db_staging)
-					// -> đồng thời chuyển trạng thái file đó thành TR
+					// -> Ä‘á»“ng thá»�i chuyá»ƒn tráº¡ng thÃ¡i file Ä‘Ã³ thÃ nh TR
 					file = new File(IMPORT_DIR + File.separator + file_name);
 					extention = file.getPath().endsWith(".xlsx") ? EXT_EXCEL
 							: file.getPath().endsWith(".txt") ? EXT_TEXT : EXT_CSV;
