@@ -40,8 +40,8 @@ public class DataWarehouse {
 	static final String STAGING_USER = conf.getStagingUser();
 	static final String STAGING_PASS = conf.getStagingPass();
 	static final String STAGING_TABLE = conf.getStagingTable();
-	//logs
-	static final String COLUMN_LIST_LOGS ="file_name,config_id,file_status,staging_load_count,file_timestamp";
+	// logs
+	static final String COLUMN_LIST_LOGS = "file_name,config_id,file_status,staging_load_count,file_timestamp";
 	//
 	DataProcess d_process;
 
@@ -86,47 +86,75 @@ public class DataWarehouse {
 
 //I. funcDownload, funcInsertLog
 	public void downloadFile() {
-		ResultSet rs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+		// 1.0 Kết nối đến DB controldb -> vào table scp get các thông tin cho việc
+		// download file từ server về local
+		ResultSet rs_scp = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
 				ControlDB.CONTROL_DB_PASS, "scp");
-		SCP scp = new SCP().getSCP(rs);
-		int success = FileDownLib.fileDownload(scp.getHostName(), scp.getPort(), scp.getUserName(), scp.getPassword(),
-				scp.getRemotePath(), scp.getLocalPath(), scp.getSyncMustMatch());
-		if(success==-1) {
-			//send mail bao loi khong ket noi duoc toi server
-			System.out.println("Connect Fail");
-			return;
-		}
-		System.out.println("download");
-		insertLog(scp.getLocalPath(), "ER");
+		// 1.1Lưu vào đối tượng SCP
+		SCP scp = new SCP().getSCP(rs_scp);
+		// 1.2 Kết nối đến DB controldb -> vào table logs lấy ra danh sách các file_name
+		// (không down lại file)
+		String not_match = "";
+		ResultSet rs_file_name = ControlDB.selectOneField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+				ControlDB.CONTROL_DB_PASS, "logs", "file_name", null, null);
 		try {
-			rs.close();
+			while (rs_file_name.next()) {
+				not_match += rs_file_name.getString(1) + ";";
+			}
+		} catch (SQLException e1) {
+			e1.printStackTrace();
+		}
+		// 1.3 Tiến hành download file (isSU=0 ->success, =-1 error)
+		int isSU = FileDownLib.fileDownload(scp.getHostName(), scp.getPort(), scp.getUserName(), scp.getPassword(),
+				scp.getRemotePath(), scp.getLocalPath(), scp.getSyncMustMatch(), not_match);
+
+		if (isSU == 0) {
+			// 1.4 Download thành công -> tiến hành ghi log với file_status là ER
+			System.out.println("DownFile success."); // send mail
+			insertLog(scp.getLocalPath(), "ER");
+		} else {
+			System.out.println("Download Fail!!!"); // send mail
+		}
+
+		try {
+			rs_scp.close();
+			rs_file_name.close();
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
 	}
 
 	public void insertLog(String folder, String file_status) {
+		// 1.6 Mở folder và kiểm tra folder tồn tại hay không?
 		File fd = new File(folder);
 		if (!fd.exists())
 			return;
 		StringBuilder value = new StringBuilder();
+		// 1.7 Nếu tồn tại thư mục thì lưu tất cả các file ở trong thư mục đó vào mảng
+		// File[]
 		File[] listFile = fd.listFiles();
 		for (File file : listFile) {
+			// Các file có định dạng ở dưới là hợp lệ
 			if (file.getPath().endsWith(EXT_EXCEL) || file.getPath().endsWith(EXT_TEXT)
 					|| file.getPath().endsWith(EXT_CSV)) {
+				// 1.8 Tạo value cho câu sql INSERT INTO TABLE VALUES value
 				value.append("('" + file.getName() + "'");
 				value.append("," + CONFIG_ID);
 				value.append(",'" + file_status + "'");
 				value.append("," + 0);
 				value.append(",NOW())");
 				try {
+					// 1.9 Mở kết nối DB controldb -> Insert thông tin của từng file xuống table
+					// logs
 					ControlDB.insertValues(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
 							ControlDB.CONTROL_DB_PASS, "Logs", COLUMN_LIST_LOGS, value.toString());
 					value = new StringBuilder();
+					// 1.10 Move file qua thư mục import_dir phục vụ cho bước 2.
+					moveFile(file, IMPORT_DIR);
 				} catch (SQLException e) {
 					e.printStackTrace();
 				}
-				moveFile(file, IMPORT_DIR);
+
 			}
 		}
 	}

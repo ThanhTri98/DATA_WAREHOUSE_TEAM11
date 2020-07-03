@@ -60,7 +60,6 @@ public class ControlDB {
 			e.printStackTrace();
 			return null;
 		}
-
 	}
 
 	public static boolean insertValues(String db_name, String user_name, String password, String table_name,
@@ -79,26 +78,20 @@ public class ControlDB {
 		return result > 0;
 	}
 
-	public static String selectOneField(String db_name, String user_name, String password, String table_name,
+	public static ResultSet selectOneField(String db_name, String user_name, String password, String table_name,
 			String field, String conditon_name, String conditon_value) {
 		try {
-			sql = "SELECT " + field + " FROM " + table_name + " WHERE " + conditon_name + "=?";
-			pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
-			pst.setString(1, conditon_value);
+			if (conditon_name == null) {
+				sql = "SELECT " + field + " FROM " + table_name;
+				pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
+			} else {
+				sql = "SELECT " + field + " FROM " + table_name + " WHERE " + conditon_name + "=?";
+				pst.setString(1, conditon_value);
+			}
 			rs = pst.executeQuery();
-			rs.next();
-			return rs.getString(field);
+			return rs;
 		} catch (Exception e) {
 			return null;
-		} finally {
-			try {
-				if (pst != null)
-					pst.close();
-				if (rs != null)
-					rs.close();
-			} catch (SQLException e) {
-				e.printStackTrace();
-			}
 		}
 	}
 
