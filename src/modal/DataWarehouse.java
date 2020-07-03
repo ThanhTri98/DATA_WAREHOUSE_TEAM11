@@ -111,7 +111,7 @@ public class DataWarehouse {
 				value.append("('" + file.getName() + "'");
 				value.append("," + CONFIG_ID);
 				value.append(",'" + file_status + "'");
-				value.append("," + countLines(file, extention));
+				value.append("," + 0);
 				value.append(",'" + ControlDB.dtf.format(ControlDB.now) + "')");
 				try {
 					ControlDB.insertValues(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
