@@ -5,6 +5,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import modal.Configuration;
+import modal.Student;
 import util.ConnectionDB;
 
 public class ControlDB {
@@ -13,8 +14,9 @@ public class ControlDB {
 //	public static LocalDateTime now = LocalDateTime.now();
 
 	public static final String CONTROL_DB_NAME = "jdbc:mysql://localhost:3306/controldb";
+
 	public static final String CONTROL_DB_USER = "root";
-	public static final String CONTROL_DB_PASS = "";
+	public static final String CONTROL_DB_PASS = "123456";
 	static PreparedStatement pst = null;
 	static ResultSet rs = null;
 	static String sql;
@@ -81,6 +83,36 @@ public class ControlDB {
 		return result > 0;
 	}
 
+	public static boolean insertValuesDBStagingToDBWareHouse(String db_name, String user_name, String password,
+			String table_name, String column_list, Student stu, int id_log, String time_expire)
+			throws SQLException, Exception {
+		sql = "INSERT INTO " + table_name + "(" + column_list + ") VALUES " + "(?,?,?,?,?,?,?,?,?,?,?,?,?)";
+		pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
+		pst.setInt(1, stu.getStt());
+		pst.setString(2, stu.getMssv());
+		pst.setString(3, stu.getHo());
+		pst.setString(4, stu.getTen());
+		pst.setString(5, stu.getNgaySinh());
+		pst.setString(6, stu.getMaLop());
+		pst.setString(7, stu.getTenLop());
+		pst.setString(8, stu.getSdt());
+		pst.setString(9, stu.getEmail());
+		pst.setString(10, stu.getQueQuan());
+		pst.setString(11, stu.getGhiChu());
+		pst.setInt(12, id_log);
+		pst.setString(13, time_expire);
+		int result = pst.executeUpdate();
+		try {
+			if (pst != null)
+				pst.close();
+			if (rs != null)
+				rs.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+		return result > 0;
+	}
+
 	public static ResultSet selectOneField(String db_name, String user_name, String password, String table_name,
 			String field, String condition_name, String condition_value) {
 		try {
@@ -98,6 +130,22 @@ public class ControlDB {
 		}
 	}
 
+	public static boolean truncateTable(String controlDbNameStaging, String controlDbUser, String controlDbPass,
+			String table_name) throws SQLException {
+		sql = "TRUNCATE " + table_name;
+		pst = ConnectionDB.createConnection(controlDbNameStaging, controlDbUser, controlDbPass).prepareStatement(sql);
+		int result = pst.executeUpdate();
+		try {
+			if (pst != null)
+				pst.close();
+			if (rs != null)
+				rs.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+		return result > 0;
+	}
+	
 	public static boolean updateLogs(String db_name, String user_name, String password, int id_logs,
 			String file_status) {
 		sql = "UPDATE LOGS SET FILE_STATUS=?,FILE_TIMESTAMP=NOW() WHERE ID=?";

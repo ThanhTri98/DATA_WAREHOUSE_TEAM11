@@ -14,6 +14,7 @@ import java.util.Iterator;
 import java.util.StringTokenizer;
 import java.util.regex.Pattern;
 
+import org.apache.poi.hssf.record.WSBoolRecord;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -53,7 +54,7 @@ public class DataWarehouse {
 	public static void main(String[] args) {
 		DataWarehouse d_warehouse = new DataWarehouse();
 //		d_warehouse.downloadFile();
-
+		d_warehouse.ExtractToStaging();
 	}
 
 	/*
@@ -165,74 +166,81 @@ public class DataWarehouse {
 	}
 
 	// II ExtractToStaging
-		public void ExtractToStaging() {
-			System.out.println("Extract Staging...");
-			// 2.0 Lấy ra tất cả các trường có file_status=ER và lưu vào ResultSet
-			ResultSet allRecordLogs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-					ControlDB.CONTROL_DB_PASS, "LOGS", "file_status", "ER");
-			try {
-				File file = null;
-				String file_name = null;
-				int file_id = -999; // default
-				String extention;
-				while (allRecordLogs.next()) {
-					// 2.1 Lấy ra tên file và id trong bảng ghi
-					file_name = allRecordLogs.getString("file_name");
-					file_id = allRecordLogs.getInt("id");
-					String values = "";// Lưu chuỗi values
-					// 2.2 Mở đối tượng file nằm trong thư mục IMPORT_DIR dựa vào file_name
-					file = new File(IMPORT_DIR + File.separator + file_name);
-					extention = file.getPath().endsWith(".xlsx") ? EXT_EXCEL // Phục vụ cho method đếm số dòng -> Staging
-							: file.getPath().endsWith(".txt") ? EXT_TEXT : EXT_CSV;
-					if (!file.exists()) // Nếu file không tồn tại thì bỏ qua và tiếp tục cho đến cuối bảng ghi
-						continue;
-					// Đếm số cột theo format trong table config
-					StringTokenizer count_Field = new StringTokenizer(COLUMN_LIST, DELIM);
-					// 2.3 Tiến hành đọc file và chuyển nội dung trong file thành
-					// chuỗi values (1,'a','b'),(2,'d','e'),(...)
-					// INSERT INTO TABLE VALUES chuỗi values
-					if (extention.equals(EXT_EXCEL)) {
-						values = d_process.readValuesXLSX(file, file_id, count_Field.countTokens());
-					} else if (extention.equals(EXT_TEXT)) {
-						values = d_process.readValuesTXT(file, file_id, count_Field.countTokens());
-					} else if (extention.equals(EXT_CSV)) {
-					}
-					try {
-						// 2.4 Tiến hành insert chuỗi values xuống table student trong db_staging
-						if (ControlDB.insertValues(STAGING_DB_NAME, STAGING_USER, STAGING_PASS, STAGING_TABLE,
-								COLUMN_LIST + ",id_log", values)) {
-							ControlDB.updateCountLines(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-									ControlDB.CONTROL_DB_PASS, file_id, "staging_load_count", countLines(file, extention));
-							System.out.println(file_name + "--> Transforming...");
-							// 2.5 Tiến hành transform dữ liệu từ staging
-							ResultSet data_staging = ControlDB.selectAllField(STAGING_DB_NAME, STAGING_USER, STAGING_PASS,
-									STAGING_TABLE, null, null);
-							int warehouse_load_count = d_process.transformData(data_staging);
-							ControlDB.updateCountLines(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-									ControlDB.CONTROL_DB_PASS, file_id,"warehouse_load_count", warehouse_load_count);
-//								ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-//										ControlDB.CONTROL_DB_PASS, file_id, "TR");
-
-						}
-					} catch (SQLException e) {
-						ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-								ControlDB.CONTROL_DB_PASS, file_id, "ERR_STAGING");
-						System.out.println(file_name + "--> ERR");
-						moveFile(file, ERR_DIR);
-						continue;
-					}
+	public void ExtractToStaging() {
+		System.out.println("Extract Staging...");
+		// 2.0 Lấy ra tất cả các trường có file_status=ER và lưu vào ResultSet
+		ResultSet allRecordLogs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+				ControlDB.CONTROL_DB_PASS, "LOGS", "file_status", "ER");
+		try {
+			File file = null;
+			String file_name = null;
+			int file_id = -999; // default
+			String extention;
+			while (allRecordLogs.next()) {
+				// 2.1 Lấy ra tên file và id trong bảng ghi
+				file_name = allRecordLogs.getString("file_name");
+				file_id = allRecordLogs.getInt("id");
+				String values = "";// Lưu chuỗi values
+				// 2.2 Mở đối tượng file nằm trong thư mục IMPORT_DIR dựa vào file_name
+				file = new File(IMPORT_DIR + File.separator + file_name);
+				extention = file.getPath().endsWith(".xlsx") ? EXT_EXCEL // Phục vụ cho method đếm số dòng -> Staging
+						: file.getPath().endsWith(".txt") ? EXT_TEXT : EXT_CSV;
+				if (!file.exists()) // Nếu file không tồn tại thì bỏ qua và tiếp tục cho đến cuối bảng ghi
+					continue;
+				// Đếm số cột theo format trong table config
+				StringTokenizer count_Field = new StringTokenizer(COLUMN_LIST, DELIM);
+				// 2.3 Tiến hành đọc file và chuyển nội dung trong file thành
+				// chuỗi values (1,'a','b'),(2,'d','e'),(...)
+				// INSERT INTO TABLE VALUES chuỗi values
+				if (extention.equals(EXT_EXCEL)) {
+					values = d_process.readValuesXLSX(file, file_id, count_Field.countTokens());
+				} else if (extention.equals(EXT_TEXT)) {
+					values = d_process.readValuesTXT(file, file_id, count_Field.countTokens());
+				} else if (extention.equals(EXT_CSV)) {
 				}
-				System.out.println("Complete");
-			} catch (SQLException e) {
-				e.printStackTrace();
-			} finally {
 				try {
-					allRecordLogs.close();
+					// 2.4 Tiến hành insert chuỗi values xuống table student trong db_staging
+					if (ControlDB.insertValues(STAGING_DB_NAME, STAGING_USER, STAGING_PASS, STAGING_TABLE,
+							COLUMN_LIST + ",id_log", values)) {
+						ControlDB.updateCountLines(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+								ControlDB.CONTROL_DB_PASS, file_id, "staging_load_count", countLines(file, extention));
+						System.out.println(file_name + "--> Transforming...");
+						// 2.5 Tiến hành transform dữ liệu từ staging
+						ResultSet data_staging = ControlDB.selectAllField(STAGING_DB_NAME, STAGING_USER, STAGING_PASS,
+								STAGING_TABLE, null, null);
+						int warehouse_load_count = d_process.transformData(data_staging);
+
+						// Update log when insert data success
+						System.out.println(warehouse_load_count + "count");
+						if (warehouse_load_count > 0) {
+							ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+									ControlDB.CONTROL_DB_PASS, file_id, "SU");
+							ControlDB.updateCountLines(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+									ControlDB.CONTROL_DB_PASS, file_id, "warehouse_load_count", warehouse_load_count);
+						} else {
+							ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+									ControlDB.CONTROL_DB_PASS, file_id, "ERR_TR");
+						}
+					}
 				} catch (SQLException e) {
-					e.printStackTrace();
+					ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+							ControlDB.CONTROL_DB_PASS, file_id, "ERR_STAGING");
+					System.out.println(file_name + "--> ERR");
+					moveFile(file, ERR_DIR);
+					continue;
 				}
 			}
+			System.out.println("Complete");
+		} catch (SQLException e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				allRecordLogs.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
 		}
+	}
 
 	private boolean moveFile(File file, String target_dir) {
 		try {

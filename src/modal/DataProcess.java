@@ -23,6 +23,8 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import com.mysql.jdbc.PreparedStatement;
 
+import dao.ControlDB;
+
 public class DataProcess {
 	static final String NUMBER_REGEX = "^[0-9]+$";
 	static final String DATE_FORMAT = "yyyy-MM-dd";
@@ -161,8 +163,8 @@ public class DataProcess {
 		//
 		String regex_dob_1 = "^\\d{4}[\\/\\-](0?[1-9]|1[012])[\\/\\-](0?[1-9]|[12][0-9]|3[01])+$";
 		String regex_dob_2 = "^(0?[1-9]|[12][0-9]|3[01])+[\\/\\-](0?[1-9]|1[012])[\\/\\-]\\d{4}$";
-		PreparedStatement pst = null;
-		String sql = "";
+		int count = 0;
+		Student stu = new Student();
 		try {
 			while (data_staging.next()) {
 				String ngay_sinh = data_staging.getString("ngay_sinh");
@@ -188,10 +190,48 @@ public class DataProcess {
 				String ghi_chu = data_staging.getString("ghi_chu");
 				int id_log = data_staging.getInt("id_log");
 				String time_expire = "NOW()";
+
+				// check in DBWareHouse, If value duplicate
+				if (ControlDB.selectOneField(DataWarehouse.W_DB_NAME, DataWarehouse.W_USER, DataWarehouse.W_PASS,
+						"student", "mssv", "mssv", mssv) != null) {
+					continue;
+				}
+				stu.setStt(stt);
+				stu.setMssv(mssv);
+				stu.setHo(ho);
+				stu.setTen(ten);
+				stu.setNgaySinh(ngay_sinh);
+				stu.setMaLop(ma_lop);
+				stu.setTenLop(ten_lop);
+				stu.setSdt(sdt);
+				stu.setEmail(email);
+				stu.setQueQuan(que_quan);
+				stu.setGhiChu(ghi_chu);
+				String columnList = DataWarehouse.COLUMN_LIST + "," + "id_log" + "," + "time_expire";
+				try {
+					// check insert data to DBStaging from DBWareHouse
+					if (ControlDB.insertValuesDBStagingToDBWareHouse(DataWarehouse.W_DB_NAME, DataWarehouse.W_USER,
+							DataWarehouse.W_PASS, "student", columnList, stu, id_log, time_expire)) {
+						count++;
+
+					}
+					
+				} catch (Exception e) {
+					System.out.println(e + "error");
+				}
 			}
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
-		return 0;
+//		 truncate table sinhvien in DBStaging if we had changed data
+		try {
+			ControlDB.truncateTable(DataWarehouse.STAGING_DB_NAME, DataWarehouse.STAGING_USER,
+					DataWarehouse.STAGING_PASS, DataWarehouse.STAGING_TABLE);
+		} catch (SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		return count;
 	}
 }
