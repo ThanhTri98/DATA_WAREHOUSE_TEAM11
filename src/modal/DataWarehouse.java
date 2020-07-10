@@ -51,7 +51,7 @@ public class DataWarehouse {
 
 	public static void main(String[] args) {
 		DataWarehouse d_warehouse = new DataWarehouse();
-//		d_warehouse.downloadFile();
+		d_warehouse.downloadFile();
 		d_warehouse.ExtractToStaging();
 	}
 
@@ -145,11 +145,11 @@ public class DataWarehouse {
 				value.append("('" + file.getName() + "'");
 				value.append("," + CONFIG_ID);
 				value.append(",'" + file_status + "'");
-				value.append("," + 0);
+				value.append("," + -1);// staging_load_count (giá trị mặc định -1)
 				value.append(",NOW())");
+				// 1.9 Mở kết nối DB controldb -> Insert thông tin của từng file xuống table
+				// logs
 				try {
-					// 1.9 Mở kết nối DB controldb -> Insert thông tin của từng file xuống table
-					// logs
 					ControlDB.insertValues(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
 							ControlDB.CONTROL_DB_PASS, "Logs", COLUMN_LIST_LOGS, value.toString());
 					value = new StringBuilder();
@@ -197,33 +197,51 @@ public class DataWarehouse {
 				} else if (extention.equals(EXT_CSV)) {
 				}
 				try {
-					// 2.4 Tiến hành insert chuỗi values xuống table student trong db_staging
+					// 2.4 Tiến hành insert chuỗi values xuống table student trong db_staging đồng
+					// thời transform rồi đưa qua warehouse
 					if (ControlDB.insertValues(STAGING_DB_NAME, STAGING_USER, STAGING_PASS, STAGING_TABLE,
 							COLUMN_LIST + ",id_log", values)) {
-						ControlDB.updateCountLines(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-								ControlDB.CONTROL_DB_PASS, file_id, "staging_load_count", countLines(file, extention));
+						// Cập nhật số dòng vừa load vào db_staging
+						ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+								ControlDB.CONTROL_DB_PASS, file_id, "staging_load_count",
+								countLines(file, extention) + "");
 						System.out.println(file_name + "--> Transforming...");
-						// 2.5 Tiến hành transform dữ liệu từ staging
+						// Lấy toàn bộ bảng ghi trong table student từ db staging
 						ResultSet data_staging = ControlDB.selectAllField(STAGING_DB_NAME, STAGING_USER, STAGING_PASS,
 								STAGING_TABLE, null, null);
+						// 2.5 Tiến hành transform dữ liệu và chuyển qua table student trong db
+						// warehouse và trả về số dòng vừa chuyển qua dw
 						int warehouse_load_count = d_process.transformData(data_staging);
-
 						// Update log when insert data success
-						System.out.println(warehouse_load_count + "count");
+						// Nếu số dòng lớn hơn 0 có nghĩa là không có trường nào bị lỗi format ( trans
+						// thành công ít nhất 1 dòng)
 						if (warehouse_load_count > 0) {
+							// Cập nhật file_status = SU
 							ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-									ControlDB.CONTROL_DB_PASS, file_id, "SU");
-							ControlDB.updateCountLines(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-									ControlDB.CONTROL_DB_PASS, file_id, "warehouse_load_count", warehouse_load_count);
+									ControlDB.CONTROL_DB_PASS, file_id, "file_status", "SU");
+							// Cập nhật số dòng load vào table student trong dw
+							ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+									ControlDB.CONTROL_DB_PASS, file_id, "warehouse_load_count",
+									warehouse_load_count + "");
+							// xong thì tiến hành chuyển file chứa dữ liệu vừa rồi qua thư mục SUCCESS_DIR
+							moveFile(file, SU_DIR);
+							System.out.println(file_name+" Transform success -> SU "+warehouse_load_count+" lines");
 						} else {
-							ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-									ControlDB.CONTROL_DB_PASS, file_id, "ERR_TR");
+							// Không dòng nào có tất cả các trường đúng định dạng-> tự mở file sửa
+							// Cập nhật file_status file dừa rồi là ERR_TRAN
+							ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+									ControlDB.CONTROL_DB_PASS, file_id, "file_status", "ERR_TRAN");
+							// Đồng thời chuyển file vừa rồi vào thục mục ERR_DIR
+							moveFile(file, ERR_DIR);
+							System.out.println(file_name+" Transform error -> ERR_TRAN");
 						}
 					}
 				} catch (SQLException e) {
-					ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-							ControlDB.CONTROL_DB_PASS, file_id, "ERR_STAGING");
-					System.out.println(file_name + "--> ERR");
+					// File không đúng format thì chịu :))
+					ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+							ControlDB.CONTROL_DB_PASS, file_id, "file_status", "ERR_STAGING");
+					System.out.println(file_name + "--> ERR_STAGING");
+					// Đưa qua thư mục lỗi thâu
 					moveFile(file, ERR_DIR);
 					continue;
 				}

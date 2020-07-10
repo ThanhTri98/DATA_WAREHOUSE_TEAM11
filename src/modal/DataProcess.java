@@ -74,7 +74,6 @@ public class DataProcess {
 		}
 	}
 
-
 	public String readValuesXLSX(File s_file, int id_log, int countCell) {
 		String values = "";
 		String value = "";
@@ -145,6 +144,41 @@ public class DataProcess {
 		}
 	}
 
+	private String convertDate(String date) {
+		String result = "";
+		String delim = "/";
+		if (date.indexOf("-") != -1) {
+			delim = "-";
+		}
+		String[] dateArr = date.split(delim);
+		if (dateArr[0].length() == 4 && delim == "/") { // 2525/05/05 ?? 2525/5/5
+			// 5/-5/-2525 -> 05/05/2525
+			for (int i = 1; i < dateArr.length; i++) {
+				if (dateArr[i].length() == 1) {
+					dateArr[i] = "0" + dateArr[i];
+				}
+			}
+			result = dateArr[0] + "/" + dateArr[1] + "/" + dateArr[2];
+		} else if (dateArr[0].length() == 4 && delim == "-") { // 2525-05-05 -> 2525/05/05
+			for (int i = 1; i < dateArr.length; i++) {
+				if (dateArr[i].length() == 1) {
+					dateArr[i] = "0" + dateArr[i];
+				}
+			}
+			result = dateArr[0] + "/" + dateArr[1] + "/" + dateArr[2];
+		} else {
+			// 5/-5/-2525 -> 05/05/2525
+			for (int i = 0; i < dateArr.length - 1; i++) {
+				if (dateArr[i].length() == 1) {
+					dateArr[i] = "0" + dateArr[i];
+				}
+			}
+			result = dateArr[2] + "/" + dateArr[1] + "/" + dateArr[0];
+		}
+
+		return result;
+	}
+
 	public int transformData(ResultSet data_staging) {
 		// Nếu trùng mssv thì insert dòng mới và update time_expire là NOW()
 		//
@@ -156,15 +190,13 @@ public class DataProcess {
 			while (data_staging.next()) {
 				String ngay_sinh = data_staging.getString("ngay_sinh");
 				// Kiểm tra định dạng ngày sinh yyyy/-MM/-dd or dd/-MM/-yyyy -> Đưa về định dạng
-				// yyyy-MM-dd
+				// yyyy/MM/dd
 				// Nếu khác thì bỏ qua bảng ghi này.
 				if (!Pattern.matches(regex_dob_1, ngay_sinh) && !Pattern.matches(regex_dob_2, ngay_sinh)) {
 					continue;
 				}
-				// Nếu là định dạng dd/-MM/-yyyy thì chuyển thành yyyy/-MM/-dd
-				if (Pattern.matches(regex_dob_2, ngay_sinh)) {
-
-				}
+				// Nếu là định dạng dd/-MM/-yyyy or yyyy-MM-dd thì chuyển thành yyyy/MM/dd
+				ngay_sinh = convertDate(ngay_sinh);
 				int stt = Integer.parseInt(data_staging.getString("stt"));
 				String mssv = data_staging.getString("mssv");
 				String ho = data_staging.getString("ho");
@@ -176,13 +208,13 @@ public class DataProcess {
 				String que_quan = data_staging.getString("que_quan");
 				String ghi_chu = data_staging.getString("ghi_chu");
 				int id_log = data_staging.getInt("id_log");
-				String time_expire = "NOW()";
 
 				// check in DBWareHouse, If value duplicate
-				if (ControlDB.selectOneField(DataWarehouse.W_DB_NAME, DataWarehouse.W_USER, DataWarehouse.W_PASS,
-						"student", "mssv", "mssv", mssv) != null) {
-					continue;
-				}
+//				if (ControlDB.selectOneField(DataWarehouse.W_DB_NAME, DataWarehouse.W_USER, DataWarehouse.W_PASS,
+//						"student", "mssv", "mssv", mssv) != null) {
+//					System.out.println("Duplicate mssv");
+//					continue;
+//				}
 				stu.setStt(stt);
 				stu.setMssv(mssv);
 				stu.setHo(ho);
@@ -193,31 +225,19 @@ public class DataProcess {
 				stu.setSdt(sdt);
 				stu.setEmail(email);
 				stu.setQueQuan(que_quan);
-				stu.setGhiChu(ghi_chu);
+				stu.setGhiChu(ghi_chu.length()==0?"str_empty":ghi_chu);
 				String columnList = DataWarehouse.COLUMN_LIST + "," + "id_log" + "," + "time_expire";
-				try {
-					// check insert data to DBStaging from DBWareHouse
-					if (ControlDB.insertValuesDBStagingToDBWareHouse(DataWarehouse.W_DB_NAME, DataWarehouse.W_USER,
-							DataWarehouse.W_PASS, "student", columnList, stu, id_log, time_expire)) {
-						count++;
-
-					}
-					
-				} catch (Exception e) {
-					System.out.println(e + "error");
+				// check insert data to DBStaging from DBWareHouse
+				if (ControlDB.insertValuesDBStagingToDBWareHouse(DataWarehouse.W_DB_NAME, DataWarehouse.W_USER,
+						DataWarehouse.W_PASS, "student", columnList, stu, id_log)) {
+					count++;
 				}
 			}
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
-//		 truncate table sinhvien in DBStaging if we had changed data
-		try {
-			ControlDB.truncateTable(DataWarehouse.STAGING_DB_NAME, DataWarehouse.STAGING_USER,
-					DataWarehouse.STAGING_PASS, DataWarehouse.STAGING_TABLE);
-		} catch (SQLException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		ControlDB.truncateTable(DataWarehouse.STAGING_DB_NAME, DataWarehouse.STAGING_USER, DataWarehouse.STAGING_PASS,
+				DataWarehouse.STAGING_TABLE);
 
 		return count;
 	}

@@ -1,5 +1,6 @@
 package dao;
 
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -9,14 +10,11 @@ import modal.Student;
 import util.ConnectionDB;
 
 public class ControlDB {
-//	public static final String DATETIME_FORMAT = "yyyy/MM/dd HH:mm:ss";
-//	public static DateTimeFormatter dtf = DateTimeFormatter.ofPattern(DATETIME_FORMAT);
-//	public static LocalDateTime now = LocalDateTime.now();
-
+	static Connection connection = null;
 	public static final String CONTROL_DB_NAME = "jdbc:mysql://localhost:3306/controldb";
 
 	public static final String CONTROL_DB_USER = "root";
-	public static final String CONTROL_DB_PASS = "123456";
+	public static final String CONTROL_DB_PASS = "";
 	static PreparedStatement pst = null;
 	static ResultSet rs = null;
 	static String sql;
@@ -26,8 +24,8 @@ public class ControlDB {
 		try {
 			conf = new Configuration();
 			sql = "SELECT * FROM CONFIGURATION";
-			pst = ConnectionDB.createConnection(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS)
-					.prepareStatement(sql);
+			connection = ConnectionDB.createConnection(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS);
+			pst = connection.prepareStatement(sql);
 			rs = pst.executeQuery();
 			conf = conf.getConfiguration(rs);
 			return conf;
@@ -40,6 +38,8 @@ public class ControlDB {
 					pst.close();
 				if (rs != null)
 					rs.close();
+				if (connection != null)
+					connection.close();
 			} catch (SQLException e) {
 				e.printStackTrace();
 			}
@@ -51,12 +51,13 @@ public class ControlDB {
 		ResultSet rs = null;
 		PreparedStatement pst = null;
 		try {
+			connection = ConnectionDB.createConnection(db_name, user_name, password);
 			if (condition_name == null) {
 				sql = "SELECT * FROM " + table_name;
-				pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
+				pst = connection.prepareStatement(sql);
 			} else {
 				sql = "SELECT * FROM " + table_name + " WHERE " + condition_name + "=?";
-				pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
+				pst = connection.prepareStatement(sql);
 				pst.setString(1, condition_value);
 			}
 			rs = pst.executeQuery();
@@ -69,59 +70,74 @@ public class ControlDB {
 
 	public static boolean insertValues(String db_name, String user_name, String password, String table_name,
 			String column_list, String values) throws SQLException {
+
 		sql = "INSERT INTO " + table_name + "(" + column_list + ") VALUES " + values;
-		pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
+		connection = ConnectionDB.createConnection(db_name, user_name, password);
+		pst = connection.prepareStatement(sql);
 		int result = pst.executeUpdate();
 		try {
-			if (pst != null)
-				pst.close();
 			if (rs != null)
 				rs.close();
+			if (connection != null)
+				connection.close();
+			if (pst != null)
+				pst.close();
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
 		return result > 0;
+
 	}
 
 	public static boolean insertValuesDBStagingToDBWareHouse(String db_name, String user_name, String password,
-			String table_name, String column_list, Student stu, int id_log, String time_expire)
-			throws SQLException, Exception {
-		sql = "INSERT INTO " + table_name + "(" + column_list + ") VALUES " + "(?,?,?,?,?,?,?,?,?,?,?,?,?)";
-		pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
-		pst.setInt(1, stu.getStt());
-		pst.setString(2, stu.getMssv());
-		pst.setString(3, stu.getHo());
-		pst.setString(4, stu.getTen());
-		pst.setString(5, stu.getNgaySinh());
-		pst.setString(6, stu.getMaLop());
-		pst.setString(7, stu.getTenLop());
-		pst.setString(8, stu.getSdt());
-		pst.setString(9, stu.getEmail());
-		pst.setString(10, stu.getQueQuan());
-		pst.setString(11, stu.getGhiChu());
-		pst.setInt(12, id_log);
-		pst.setString(13, time_expire);
-		int result = pst.executeUpdate();
+			String table_name, String column_list, Student stu, int id_log) {
 		try {
-			if (pst != null)
-				pst.close();
-			if (rs != null)
-				rs.close();
-		} catch (SQLException e) {
-			e.printStackTrace();
+			sql = "INSERT INTO " + table_name + "(" + column_list + ") VALUES " + "(?,?,?,?,?,?,?,?,?,?,?,?,NOW())";
+			connection = ConnectionDB.createConnection(db_name, user_name, password);
+			pst = connection.prepareStatement(sql);
+			pst.setInt(1, stu.getStt());
+			pst.setString(2, stu.getMssv());
+			pst.setString(3, stu.getHo());
+			pst.setString(4, stu.getTen());
+			pst.setString(5, stu.getNgaySinh());
+			pst.setString(6, stu.getMaLop());
+			pst.setString(7, stu.getTenLop());
+			pst.setString(8, stu.getSdt());
+			pst.setString(9, stu.getEmail());
+			pst.setString(10, stu.getQueQuan());
+			pst.setString(11, stu.getGhiChu());
+			pst.setInt(12, id_log);
+			int result = pst.executeUpdate();
+			return result > 0;
+		} catch (SQLException e1) {
+			e1.printStackTrace();
+			return false;
+		} finally {
+			try {
+				if (pst != null)
+					pst.close();
+				if (rs != null)
+					rs.close();
+				if (connection != null)
+					connection.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
 		}
-		return result > 0;
+
 	}
 
 	public static ResultSet selectOneField(String db_name, String user_name, String password, String table_name,
 			String field, String condition_name, String condition_value) {
 		try {
+			connection = ConnectionDB.createConnection(db_name, user_name, password);
 			if (condition_name == null) {
 				sql = "SELECT " + field + " FROM " + table_name;
-				pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
+				pst = connection.prepareStatement(sql);
 			} else {
 				sql = "SELECT " + field + " FROM " + table_name + " WHERE " + condition_name + "=?";
 				pst.setString(1, condition_value);
+				pst = connection.prepareStatement(sql);
 			}
 			rs = pst.executeQuery();
 			return rs;
@@ -131,31 +147,15 @@ public class ControlDB {
 	}
 
 	public static boolean truncateTable(String controlDbNameStaging, String controlDbUser, String controlDbPass,
-			String table_name) throws SQLException {
-		sql = "TRUNCATE " + table_name;
-		pst = ConnectionDB.createConnection(controlDbNameStaging, controlDbUser, controlDbPass).prepareStatement(sql);
-		int result = pst.executeUpdate();
+			String table_name) {
 		try {
-			if (pst != null)
-				pst.close();
-			if (rs != null)
-				rs.close();
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-		return result > 0;
-	}
-	
-	public static boolean updateLogs(String db_name, String user_name, String password, int id_logs,
-			String file_status) {
-		sql = "UPDATE LOGS SET FILE_STATUS=?,FILE_TIMESTAMP=NOW() WHERE ID=?";
-		try {
-			pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
-			pst.setString(1, file_status);
-			pst.setInt(2, id_logs);
-			return pst.executeUpdate() > 0;
-		} catch (SQLException e) {
-			e.printStackTrace();
+			sql = "TRUNCATE " + table_name;
+			connection = ConnectionDB.createConnection(controlDbNameStaging, controlDbUser, controlDbPass);
+			pst = connection.prepareStatement(sql);
+			int result = pst.executeUpdate();
+			return result > 0;
+		} catch (SQLException e1) {
+			e1.printStackTrace();
 			return false;
 		} finally {
 			try {
@@ -163,43 +163,27 @@ public class ControlDB {
 					pst.close();
 				if (rs != null)
 					rs.close();
-			} catch (SQLException e) {
-				e.printStackTrace();
-			}
-//
-		}
-	}
-
-	public static boolean updateFileStatus(String db_name, String user_name, String password, int id_logs,
-			String file_status) {
-		sql = "UPDATE LOGS SET FILE_STATUS=?,FILE_TIMESTAMP=NOW() WHERE ID=?";
-		try {
-			pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
-			pst.setString(1, file_status);
-			pst.setInt(2, id_logs);
-			return pst.executeUpdate() > 0;
-		} catch (SQLException e) {
-			e.printStackTrace();
-			return false;
-		} finally {
-			try {
-				if (pst != null)
-					pst.close();
-				if (rs != null)
-					rs.close();
+				if (connection != null)
+					connection.close();
 			} catch (SQLException e) {
 				e.printStackTrace();
 			}
 		}
+
 	}
 
-	public static boolean updateCountLines(String db_name, String user_name, String password, int id_logs,
-			String name_field, int count) {
+	public static boolean updateLogs(String db_name, String user_name, String password, int id_logs, String name_field,
+			String value) {
+
 		sql = "UPDATE LOGS SET " + name_field + "=?,FILE_TIMESTAMP=NOW() WHERE ID=?";
 		try {
-			pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
-			pst.setInt(1, count);
-//			pst.setString(2, dtf.format(now));
+			connection = ConnectionDB.createConnection(db_name, user_name, password);
+			pst = connection.prepareStatement(sql);
+			if (name_field.equals("staging_load_count") || name_field.equals("warehouse_load_count")) {
+				pst.setInt(1, Integer.parseInt(value));
+			} else {
+				pst.setString(1, value);
+			}
 			pst.setInt(2, id_logs);
 			return pst.executeUpdate() > 0;
 		} catch (SQLException e) {
@@ -211,11 +195,14 @@ public class ControlDB {
 					pst.close();
 				if (rs != null)
 					rs.close();
+				if (connection != null)
+					connection.close();
 			} catch (SQLException e) {
 				e.printStackTrace();
 			}
 		}
 	}
+
 //	public boolean tableExist(String table_name) {
 //	try {
 //		DatabaseMetaData dbm = ConnectionDB.createConnection(this.target_db_name).getMetaData();
