@@ -3,25 +3,21 @@ package dao;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 import modal.Configuration;
 import util.ConnectionDB;
 
 public class ControlDB {
-	public static final String DATETIME_FORMAT = "yyyy/MM/dd HH:mm:ss";
-	public static DateTimeFormatter dtf = DateTimeFormatter.ofPattern(DATETIME_FORMAT);
-	public static LocalDateTime now = LocalDateTime.now();
-	
+//	public static final String DATETIME_FORMAT = "yyyy/MM/dd HH:mm:ss";
+//	public static DateTimeFormatter dtf = DateTimeFormatter.ofPattern(DATETIME_FORMAT);
+//	public static LocalDateTime now = LocalDateTime.now();
+
 	public static final String CONTROL_DB_NAME = "jdbc:mysql://localhost:3306/controldb";
 	public static final String CONTROL_DB_USER = "root";
 	public static final String CONTROL_DB_PASS = "";
 	static PreparedStatement pst = null;
 	static ResultSet rs = null;
 	static String sql;
-
-	
 
 	public static Configuration getConfig() {
 		Configuration conf = null;
@@ -48,12 +44,19 @@ public class ControlDB {
 		}
 	}
 
-	public static ResultSet selectAllField(String db_name, String user_name, String password, String table_name) {
+	public static ResultSet selectAllField(String db_name, String user_name, String password, String table_name,
+			String condition_name, String condition_value) {
 		ResultSet rs = null;
 		PreparedStatement pst = null;
 		try {
-			sql = "SELECT * FROM " + table_name;
-			pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
+			if (condition_name == null) {
+				sql = "SELECT * FROM " + table_name;
+				pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
+			} else {
+				sql = "SELECT * FROM " + table_name + " WHERE " + condition_name + "=?";
+				pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
+				pst.setString(1, condition_value);
+			}
 			rs = pst.executeQuery();
 			return rs;
 		} catch (SQLException e) {
@@ -79,14 +82,14 @@ public class ControlDB {
 	}
 
 	public static ResultSet selectOneField(String db_name, String user_name, String password, String table_name,
-			String field, String conditon_name, String conditon_value) {
+			String field, String condition_name, String condition_value) {
 		try {
-			if (conditon_name == null) {
+			if (condition_name == null) {
 				sql = "SELECT " + field + " FROM " + table_name;
 				pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
 			} else {
-				sql = "SELECT " + field + " FROM " + table_name + " WHERE " + conditon_name + "=?";
-				pst.setString(1, conditon_value);
+				sql = "SELECT " + field + " FROM " + table_name + " WHERE " + condition_name + "=?";
+				pst.setString(1, condition_value);
 			}
 			rs = pst.executeQuery();
 			return rs;
@@ -97,12 +100,11 @@ public class ControlDB {
 
 	public static boolean updateLogs(String db_name, String user_name, String password, int id_logs,
 			String file_status) {
-		sql = "UPDATE LOGS SET FILE_STATUS=?,FILE_TIMESTAMP=? WHERE ID=?";
+		sql = "UPDATE LOGS SET FILE_STATUS=?,FILE_TIMESTAMP=NOW() WHERE ID=?";
 		try {
 			pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
 			pst.setString(1, file_status);
-			pst.setString(2, dtf.format(now));
-			pst.setInt(3, id_logs);
+			pst.setInt(2, id_logs);
 			return pst.executeUpdate() > 0;
 		} catch (SQLException e) {
 			e.printStackTrace();
@@ -119,6 +121,7 @@ public class ControlDB {
 //
 		}
 	}
+
 	public static boolean updateFileStatus(String db_name, String user_name, String password, int id_logs,
 			String file_status) {
 		sql = "UPDATE LOGS SET FILE_STATUS=?,FILE_TIMESTAMP=NOW() WHERE ID=?";
@@ -141,9 +144,10 @@ public class ControlDB {
 			}
 		}
 	}
+
 	public static boolean updateCountLines(String db_name, String user_name, String password, int id_logs,
-			int count) {
-		sql = "UPDATE LOGS SET STAGING_LOAD_COUNT=?,FILE_TIMESTAMP=NOW() WHERE ID=?";
+			String name_field, int count) {
+		sql = "UPDATE LOGS SET " + name_field + "=?,FILE_TIMESTAMP=NOW() WHERE ID=?";
 		try {
 			pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
 			pst.setInt(1, count);

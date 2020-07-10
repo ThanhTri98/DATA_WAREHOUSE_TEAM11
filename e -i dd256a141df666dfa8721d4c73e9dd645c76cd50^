@@ -1,0 +1,171 @@
+[33mcommit dd256a141df666dfa8721d4c73e9dd645c76cd50[m[33m ([m[1;36mHEAD -> [m[1;32mThanhTri[m[33m, [m[1;31morigin/ThanhTri[m[33m)[m
+Author: Thanh Tri 98 <vothanhtri100898@gmail.com>
+Date:   Fri Jul 3 21:45:19 2020 +0700
+
+    Update func & comment
+    
+     fileDownload(thêm regex_NotMatch phục vụ cho việc down file không bị trùng lặp), insertLog, selectOneField
+
+[33mcommit 44b3be1f48fe92c993fff71ee919ce1fb97aa1ed[m
+Author: Thanh Tri 98 <vothanhtri100898@gmail.com>
+Date:   Fri Jul 3 20:16:49 2020 +0700
+
+    Update func downloadFile, insertLogs
+
+[33mcommit fe98edd1c766e8500d8e4a7a49a9b7a68769d5ed[m
+Merge: 3806398 eff9e1a
+Author: Thanh Tri 98 <vothanhtri100898@gmail.com>
+Date:   Fri Jul 3 14:45:12 2020 +0700
+
+    Merge branch 'ThanhTri'
+
+[33mcommit 38063988307705f8641a44e5ea9f6a9887bcbb77[m
+Merge: e1e8837 339b776
+Author: Thanh Trí <66017300+ThanhTri98@users.noreply.github.com>
+Date:   Fri Jul 3 14:17:15 2020 +0700
+
+    Merge pull request #3 from ThanhTri98/DoHieu
+    
+    Do hieu
+
+[33mcommit 339b7768f3683865800ec25bc7346feecb763d58[m[33m ([m[1;31morigin/DoHieu[m[33m)[m
+Author: kimhieu1999 <59208924+kimhieu1999@users.noreply.github.com>
+Date:   Fri Jul 3 14:09:50 2020 +0700
+
+    format code
+
+[33mcommit b7228108b47384d74407b5fcb8ff5b558ce97606[m
+Author: kimhieu1999 <59208924+kimhieu1999@users.noreply.github.com>
+Date:   Fri Jul 3 14:01:14 2020 +0700
+
+    Update insertLogs
+
+[33mcommit 7b3322d7908f2a3325164cd87cc9776a397d7d16[m
+Author: kimhieu1999 <59208924+kimhieu1999@users.noreply.github.com>
+Date:   Fri Jul 3 13:45:37 2020 +0700
+
+    DoHieu
+    
+    Add file download
+
+[33mcommit e1e88376efaa8ecb0bd513b1850fbe5038949074[m
+Merge: 81b81b2 eb3737a
+Author: TranVy1999 <49115910+TranVy1999@users.noreply.github.com>
+Date:   Fri Jul 3 13:10:45 2020 +0700
+
+    Merge pull request #2 from ThanhTri98/DoHieu
+    
+    DoHieu
+
+[33mcommit eb3737a84e08f8bd70855423cffce4012faaac63[m
+Author: kimhieu1999 <59208924+kimhieu1999@users.noreply.github.com>
+Date:   Fri Jul 3 13:07:39 2020 +0700
+
+    Add file chilkat.dll
+
+[33mcommit 20ce766432cdbb6bdf441f41e705d894d5b007ad[m
+Author: kimhieu1999 <59208924+kimhieu1999@users.noreply.github.com>
+Date:   Fri Jul 3 12:57:40 2020 +0700
+
+    DoHieu
+    
+    thêm thư viện chillkat
+
+[33mcommit 81b81b2bc65c643e51a3af5cebe10b660bf0c677[m
+Author: TranVy1999 <49115910+TranVy1999@users.noreply.github.com>
+Date:   Fri Jul 3 11:30:06 2020 +0700
+
+    Update README.md
+
+[33mcommit cdd2be660e9e296a5035211db9f093debf618826[m
+Author: Thanh Tri 98 <vothanhtri100898@gmail.com>
+Date:   Fri Jul 3 11:09:42 2020 +0700
+
+    Update DataProcess.class
+
+[33mcommit eff9e1a2c3e50be79aae3ddaec52d56aea8ee36b[m
+Author: Thanh Tri 98 <vothanhtri100898@gmail.com>
+Date:   Wed Jul 1 21:38:40 2020 +0700
+
+    Update func
+    
+    readValues...(), checkFileStatus
+
+[33mcommit 9782dc8cc64fa3743f8ffc4f8b80edcb4527f5bf[m
+Author: Thanh Tri 98 <vothanhtri100898@gmail.com>
+Date:   Wed Jul 1 15:21:06 2020 +0700
+
+    Thêm thư viện đọc file xlsx
+
+[33mcommit 973a8d7aeae95d7d4b2d2bde4f25ccd5c5a82560[m
+Author: Thanh Tri 98 <vothanhtri100898@gmail.com>
+Date:   Wed Jul 1 15:09:52 2020 +0700
+
+    Add func  updateFileStatus, updateCountLines
+    
+    Co-Authored-By: Thanh Trí <thanhtri98@users.noreply.github.com>
+
+[33mcommit 41bf4cdfb9ca10f5f96f5a93ca36722c53c4ac66[m
+Author: Thanh Tri 98 <vothanhtri100898@gmail.com>
+Date:   Wed Jul 1 15:02:47 2020 +0700
+
+    Update func ReadLines, readValuesXLSX
+    
+    6996
+
+[33mcommit 0ee19d4b417574bdccc49b74474a68f54b61afeb[m
+Merge: 80db2cc 5f4e112
+Author: Thanh Tri 98 <vothanhtri100898@gmail.com>
+Date:   Wed Jul 1 14:56:44 2020 +0700
+
+    Merge branch 'ThanhTri' of https://github.com/ThanhTri98/DATA_WAREHOUSE_TEAM11 into ThanhTri
+
+[33mcommit 80db2cc0ce12b10873315c4f109ced3f58248629[m
+Author: Thanh Tri 98 <vothanhtri100898@gmail.com>
+Date:   Wed Jul 1 14:55:39 2020 +0700
+
+    add func checkFileStatus()
+    
+    Support step 2
+
+[33mcommit 5f4e112a1262adb04a6039d75dfb6f890856a826[m
+Author: Thanh Trí <66017300+ThanhTri98@users.noreply.github.com>
+Date:   Wed Jul 1 14:36:05 2020 +0700
+
+    Delete file tmp
+
+[33mcommit 18d8a3d7b1fad824ad539af099c58c721e9c406e[m
+Author: Thanh Tri 98 <vothanhtri100898@gmail.com>
+Date:   Wed Jul 1 14:34:07 2020 +0700
+
+    First Commit
+
+[33mcommit 8deb0aa8b365e76abaa3145c8d54e1b34b2aac78[m
+Author: Thanh Tri 98 <vothanhtri100898@gmail.com>
+Date:   Wed Jul 1 14:30:10 2020 +0700
+
+    UTF 8
+
+[33mcommit 0f3389fc42f46de08f27ba719531a0a645b8911b[m
+Author: Thanh Tri 98 <vothanhtri100898@gmail.com>
+Date:   Wed Jul 1 14:16:13 2020 +0700
+
+    first commit
+
+[33mcommit aa843a134196ade63c4e3333a15e414f1450734c[m[33m ([m[1;31morigin/XuanVy[m[33m)[m
+Author: Thanh Tri 98 <vothanhtri100898@gmail.com>
+Date:   Wed Jul 1 13:13:08 2020 +0700
+
+    Source code
+
+[33mcommit 5ed537aac62b18f43760a8eeb0e7427ade3b61de[m
+Author: Thanh Trí <66017300+ThanhTri98@users.noreply.github.com>
+Date:   Wed Jul 1 13:05:18 2020 +0700
+
+    Update README.md
+
+[33mcommit ea7262acca677503cc00ca0dbd3f5312664dfcc5[m
+Author: Thanh Trí <66017300+ThanhTri98@users.noreply.github.com>
+Date:   Wed Jul 1 13:03:19 2020 +0700
+
+    Initial commit

@@ -48,5 +48,8 @@ public class FileDownLib {
 			ssh.Disconnect();
 			return 0;
 		}
+		public static void main(String[] args) {
+			System.out.println("java.library.path :" + System.getProperty("java.library.path"));
+		}
 
 }
