@@ -7,21 +7,22 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 import modal.Configuration;
+import modal.Student;
 import util.ConnectionDB;
 
 public class ControlDB {
 	public static final String DATETIME_FORMAT = "yyyy/MM/dd HH:mm:ss";
 	public static DateTimeFormatter dtf = DateTimeFormatter.ofPattern(DATETIME_FORMAT);
 	public static LocalDateTime now = LocalDateTime.now();
-	
+
 	public static final String CONTROL_DB_NAME = "jdbc:mysql://localhost:3306/controldb";
+	public static final String CONTROL_DB_NAME_STAGING = "jdbc:mysql://localhost:3306/db_staging";
+	public static final String CONTROL_DB_NAME_WAREHOUSE = "jdbc:mysql://localhost:3306/warehouse";
 	public static final String CONTROL_DB_USER = "root";
-	public static final String CONTROL_DB_PASS = "";
+	public static final String CONTROL_DB_PASS = "123456";
 	static PreparedStatement pst = null;
 	static ResultSet rs = null;
 	static String sql;
-
-	
 
 	public static Configuration getConfig() {
 		Configuration conf = null;
@@ -67,6 +68,49 @@ public class ControlDB {
 			String column_list, String values) throws SQLException {
 		sql = "INSERT INTO " + table_name + "(" + column_list + ") VALUES " + values;
 		pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
+		int result = pst.executeUpdate();
+		try {
+			if (pst != null)
+				pst.close();
+			if (rs != null)
+				rs.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+		return result > 0;
+	}
+
+	public static boolean insertValuesDBStagingToDBWareHouse(String db_name, String user_name, String password,
+			String table_name, String column_list, Student stu) throws SQLException, Exception {
+		sql = "INSERT INTO " + table_name + "(" + column_list + ") VALUES " + "(?,?,?,?,?,?,?,?,?,?,?)";
+		pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
+		pst.setInt(1, stu.getStt());
+		pst.setString(2, stu.getMssv());
+		pst.setString(3, stu.getHo());
+		pst.setString(4, stu.getTen());
+		pst.setString(5, stu.getNgaySinh());
+		pst.setString(6, stu.getMaLop());
+		pst.setString(7, stu.getTenLop());
+		pst.setString(8, stu.getSdt());
+		pst.setString(9, stu.getEmail());
+		pst.setString(10, stu.getQueQuan());
+		pst.setString(11, stu.getGhiChu());
+		int result = pst.executeUpdate();
+		try {
+			if (pst != null)
+				pst.close();
+			if (rs != null)
+				rs.close();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+		return result > 0;
+	}
+
+	public static boolean truncateTable(String controlDbNameStaging, String controlDbUser, String controlDbPass,
+			String table_name) throws SQLException {
+		sql = "TRUNCATE " + table_name;
+		pst = ConnectionDB.createConnection(controlDbNameStaging, controlDbUser, controlDbPass).prepareStatement(sql);
 		int result = pst.executeUpdate();
 		try {
 			if (pst != null)
@@ -126,6 +170,7 @@ public class ControlDB {
 //
 		}
 	}
+
 	public static boolean updateFileStatus(String db_name, String user_name, String password, int id_logs,
 			String file_status) {
 		sql = "UPDATE LOGS SET FILE_STATUS=?,FILE_TIMESTAMP=NOW() WHERE ID=?";
@@ -148,8 +193,8 @@ public class ControlDB {
 			}
 		}
 	}
-	public static boolean updateCountLines(String db_name, String user_name, String password, int id_logs,
-			int count) {
+
+	public static boolean updateCountLines(String db_name, String user_name, String password, int id_logs, int count) {
 		sql = "UPDATE LOGS SET STAGING_LOAD_COUNT=?,FILE_TIMESTAMP=NOW() WHERE ID=?";
 		try {
 			pst = ConnectionDB.createConnection(db_name, user_name, password).prepareStatement(sql);
@@ -171,51 +216,5 @@ public class ControlDB {
 			}
 		}
 	}
-//	public boolean tableExist(String table_name) {
-//	try {
-//		DatabaseMetaData dbm = ConnectionDB.createConnection(this.target_db_name).getMetaData();
-//		ResultSet tables = dbm.getTables(null, null, table_name, null);
-//		try {
-//			if (tables.next()) {
-//				return true;
-//			}
-//		} catch (SQLException e) {
-//			e.printStackTrace();
-//			return false;
-//		}
-//	} catch (SQLException e) {
-//		e.printStackTrace();
-//		return false;
-//	}
-//
-//	return false;
-//}
 
-//	public boolean createTable(String table_name, String variables, String column_list) {
-//		sql = "CREATE TABLE " + table_name + " (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,";
-//		String[] vari = variables.split(",");
-//		String[] col = column_list.split(",");
-//		for (int i = 0; i < vari.length; i++) {
-//			sql += col[i] + " " + vari[i] + " NOT NULL,";
-//		}
-//		sql = sql.substring(0, sql.length() - 1) + ")";
-//		try {
-//			pst = ConnectionDB.createConnection(this.target_db_name).prepareStatement(sql);
-//			pst.executeUpdate();
-//			return true;
-//		} catch (SQLException e) {
-//			e.printStackTrace();
-//			return false;
-//		} finally {
-//			try {
-//				if (pst != null)
-//					pst.close();
-//				if (rs != null)
-//					rs.close();
-//			} catch (SQLException e) {
-//				e.printStackTrace();
-//			}
-//
-//		}
-//	}
 }

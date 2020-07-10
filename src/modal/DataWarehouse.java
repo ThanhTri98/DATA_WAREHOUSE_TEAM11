@@ -12,6 +12,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.StringTokenizer;
+import java.util.regex.Pattern;
 
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
@@ -40,8 +41,8 @@ public class DataWarehouse {
 	static final String STAGING_USER = conf.getStagingUser();
 	static final String STAGING_PASS = conf.getStagingPass();
 	static final String STAGING_TABLE = conf.getStagingTable();
-	//logs
-	static final String COLUMN_LIST_LOGS ="file_name,config_id,file_status,staging_load_count,file_timestamp";
+	// logs
+	static final String COLUMN_LIST_LOGS = "file_name,config_id,file_status,staging_load_count,file_timestamp";
 	//
 	DataProcess d_process;
 
@@ -51,7 +52,9 @@ public class DataWarehouse {
 
 	public static void main(String[] args) {
 		DataWarehouse d_warehouse = new DataWarehouse();
-		d_warehouse.downloadFile();
+//		d_warehouse.downloadFile();
+		d_warehouse.checkFileStatus();
+
 	}
 
 	/*
@@ -91,12 +94,11 @@ public class DataWarehouse {
 		SCP scp = new SCP().getSCP(rs);
 		int success = FileDownLib.fileDownload(scp.getHostName(), scp.getPort(), scp.getUserName(), scp.getPassword(),
 				scp.getRemotePath(), scp.getLocalPath(), scp.getSyncMustMatch());
-		if(success==-1) {
-			//send mail bao loi khong ket noi duoc toi server
+		if (success == -1) {
+			// send mail bao loi khong ket noi duoc toi server
 			System.out.println("Connect Fail");
 			return;
 		}
-		System.out.println("download");
 		insertLog(scp.getLocalPath(), "ER");
 		try {
 			rs.close();
@@ -126,7 +128,7 @@ public class DataWarehouse {
 				} catch (SQLException e) {
 					e.printStackTrace();
 				}
-				moveFile(file, IMPORT_DIR);
+//				moveFile(file, IMPORT_DIR);
 			}
 		}
 	}
@@ -173,6 +175,9 @@ public class DataWarehouse {
 							ControlDB.updateCountLines(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
 									ControlDB.CONTROL_DB_PASS, file_id, countLines(file, extention));
 
+							/// transform data
+							tranformData(allRecordLogs, file);
+
 						}
 					} catch (SQLException e) {
 						ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
@@ -180,11 +185,6 @@ public class DataWarehouse {
 						moveFile(file, ER_DIR);
 						continue;
 					}
-
-				} else if (allRecordLogs.getString("file_status").equals("TR")) {
-
-				} else if (allRecordLogs.getString("file_status").equals("SU")) {
-
 				}
 			}
 		} catch (SQLException e) {
@@ -194,6 +194,66 @@ public class DataWarehouse {
 				allRecordLogs.close();
 			} catch (SQLException e) {
 				e.printStackTrace();
+			}
+		}
+//		 truncate table sinhvien in DBStaging if we had changed data
+		try {
+			ControlDB.truncateTable(ControlDB.CONTROL_DB_NAME_STAGING, ControlDB.CONTROL_DB_USER,
+					ControlDB.CONTROL_DB_PASS, "student");
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
+
+	private void tranformData(ResultSet allRecordLogs, File file) throws NumberFormatException, SQLException {
+		ResultSet allValueDB_Staging = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME_STAGING,
+				ControlDB.CONTROL_DB_USER, ControlDB.CONTROL_DB_PASS, "student");
+		Student stu = new Student();
+		String regex_dob = "\\d{4}[\\/\\-](0?[1-9]|1[012])[\\/\\-](0?[1-9]|[12][0-9]|3[01])*";
+		while (allValueDB_Staging.next()) {
+			String ngaySinh = allValueDB_Staging.getString("ngay_sinh");
+			if (!Pattern.matches(regex_dob, ngaySinh))
+				continue;
+			int stt = Integer.parseInt(allValueDB_Staging.getString("stt"));
+			String mssv = allValueDB_Staging.getString("mssv");
+			String ho = allValueDB_Staging.getString("ho");
+			String ten = allValueDB_Staging.getString("ten");
+			String maLop = allValueDB_Staging.getString("ma_lop");
+			String tenLop = allValueDB_Staging.getString("ten_lop");
+			String sdt = allValueDB_Staging.getString("sdt");
+			String email = allValueDB_Staging.getString("email");
+			String queQuan = allValueDB_Staging.getString("que_quan");
+			String ghiChu = allValueDB_Staging.getString("ghi_chu");
+//			String date_expired = allValueDB_Staging.getString("date_expired");
+
+			// check in DBWareHouse, If value duplicate
+			if (ControlDB.selectOneField(ControlDB.CONTROL_DB_NAME_WAREHOUSE, ControlDB.CONTROL_DB_USER,
+					ControlDB.CONTROL_DB_PASS, "warehouse", "mssv", "mssv", mssv) != null) {
+			}
+			stu.setStt(stt);
+			stu.setMssv(mssv);
+			stu.setHo(ho);
+			stu.setTen(ten);
+			stu.setNgaySinh(ngaySinh);
+			stu.setMaLop(maLop);
+			stu.setTenLop(tenLop);
+			stu.setSdt(sdt);
+			stu.setEmail(email);
+			stu.setQueQuan(queQuan);
+			stu.setGhiChu(ghiChu);
+//				stu.setExpired(date_expired);
+			try {
+				// check insert data to DBStaging from DBWareHouse
+				if (ControlDB.insertValuesDBStagingToDBWareHouse(ControlDB.CONTROL_DB_NAME_WAREHOUSE,
+						ControlDB.CONTROL_DB_USER, ControlDB.CONTROL_DB_PASS, "student", COLUMN_LIST, stu)) {
+					// Update log when insert data success
+					ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+							ControlDB.CONTROL_DB_PASS, allRecordLogs.getInt("id"), "SU");
+
+				}
+			} catch (Exception e) {
+				System.out.println(file);
+				System.out.println(e + "error");
 			}
 		}
 	}
