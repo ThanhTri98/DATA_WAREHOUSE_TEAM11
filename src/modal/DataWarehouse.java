@@ -30,7 +30,7 @@ public class DataWarehouse {
 	static final int CONFIG_ID = conf.getIdConfig();
 	static final String IMPORT_DIR = conf.getImportDir();
 	static final String SU_DIR = conf.getSuccessDir();
-	static final String ER_DIR = conf.getErrorDir();
+	static final String ERR_DIR = conf.getErrorDir();
 	static final String COLUMN_LIST = conf.getColmnList();
 	static final String DELIM = conf.getDelimiter();
 	static final String W_DB_NAME = conf.getWarehouseDBName();
@@ -53,7 +53,6 @@ public class DataWarehouse {
 	public static void main(String[] args) {
 		DataWarehouse d_warehouse = new DataWarehouse();
 //		d_warehouse.downloadFile();
-		d_warehouse.checkFileStatus();
 
 	}
 
@@ -165,130 +164,75 @@ public class DataWarehouse {
 		}
 	}
 
-	// II funcCheckFileStatus -> extract
-	public void checkFileStatus() {
-		ResultSet allRecordLogs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-				ControlDB.CONTROL_DB_PASS, "LOGS");
-		try {
-			File file = null;
-			String file_name = null;
-			String file_status = null;
-			int file_id = -999;
-			String extention;
-			while (allRecordLogs.next()) {
-				file_name = allRecordLogs.getString("file_name");
-				file_status = allRecordLogs.getString("file_status");
-				file_id = allRecordLogs.getInt("id");
-				if (file_status.equals("ER")) {
-					String values = "";
-					// Tien hanh ghi toàn bộ nội dung của file đó vào table student (trong DB
-					// db_staging)
-					// -> đồng thời chuyển trạng thái file đó thành TR
+	// II ExtractToStaging
+		public void ExtractToStaging() {
+			System.out.println("Extract Staging...");
+			// 2.0 Lấy ra tất cả các trường có file_status=ER và lưu vào ResultSet
+			ResultSet allRecordLogs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+					ControlDB.CONTROL_DB_PASS, "LOGS", "file_status", "ER");
+			try {
+				File file = null;
+				String file_name = null;
+				int file_id = -999; // default
+				String extention;
+				while (allRecordLogs.next()) {
+					// 2.1 Lấy ra tên file và id trong bảng ghi
+					file_name = allRecordLogs.getString("file_name");
+					file_id = allRecordLogs.getInt("id");
+					String values = "";// Lưu chuỗi values
+					// 2.2 Mở đối tượng file nằm trong thư mục IMPORT_DIR dựa vào file_name
 					file = new File(IMPORT_DIR + File.separator + file_name);
-					extention = file.getPath().endsWith(".xlsx") ? EXT_EXCEL
+					extention = file.getPath().endsWith(".xlsx") ? EXT_EXCEL // Phục vụ cho method đếm số dòng -> Staging
 							: file.getPath().endsWith(".txt") ? EXT_TEXT : EXT_CSV;
-					if (!file.exists())
-						break;
+					if (!file.exists()) // Nếu file không tồn tại thì bỏ qua và tiếp tục cho đến cuối bảng ghi
+						continue;
+					// Đếm số cột theo format trong table config
 					StringTokenizer count_Field = new StringTokenizer(COLUMN_LIST, DELIM);
-					if (file.getPath().endsWith(EXT_EXCEL)) {
+					// 2.3 Tiến hành đọc file và chuyển nội dung trong file thành
+					// chuỗi values (1,'a','b'),(2,'d','e'),(...)
+					// INSERT INTO TABLE VALUES chuỗi values
+					if (extention.equals(EXT_EXCEL)) {
 						values = d_process.readValuesXLSX(file, file_id, count_Field.countTokens());
-					} else if (file.getPath().endsWith(EXT_TEXT)) {
+					} else if (extention.equals(EXT_TEXT)) {
 						values = d_process.readValuesTXT(file, file_id, count_Field.countTokens());
-					} else if (file.getPath().endsWith(EXT_CSV)) {
-						// Tu Tu lam
+					} else if (extention.equals(EXT_CSV)) {
 					}
 					try {
-						// extract to db_staging
+						// 2.4 Tiến hành insert chuỗi values xuống table student trong db_staging
 						if (ControlDB.insertValues(STAGING_DB_NAME, STAGING_USER, STAGING_PASS, STAGING_TABLE,
 								COLUMN_LIST + ",id_log", values)) {
-							// change status in table logs
-							ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-									ControlDB.CONTROL_DB_PASS, file_id, "TR");
 							ControlDB.updateCountLines(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-									ControlDB.CONTROL_DB_PASS, file_id, countLines(file, extention));
-
-							/// transform data
-							tranformData(allRecordLogs, file);
+									ControlDB.CONTROL_DB_PASS, file_id, "staging_load_count", countLines(file, extention));
+							System.out.println(file_name + "--> Transforming...");
+							// 2.5 Tiến hành transform dữ liệu từ staging
+							ResultSet data_staging = ControlDB.selectAllField(STAGING_DB_NAME, STAGING_USER, STAGING_PASS,
+									STAGING_TABLE, null, null);
+							int warehouse_load_count = d_process.transformData(data_staging);
+							ControlDB.updateCountLines(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+									ControlDB.CONTROL_DB_PASS, file_id,"warehouse_load_count", warehouse_load_count);
+//								ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+//										ControlDB.CONTROL_DB_PASS, file_id, "TR");
 
 						}
 					} catch (SQLException e) {
 						ControlDB.updateFileStatus(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-								ControlDB.CONTROL_DB_PASS, file_id, "ERR");
-						moveFile(file, ER_DIR);
+								ControlDB.CONTROL_DB_PASS, file_id, "ERR_STAGING");
+						System.out.println(file_name + "--> ERR");
+						moveFile(file, ERR_DIR);
 						continue;
 					}
 				}
-			}
-		} catch (SQLException e) {
-			e.printStackTrace();
-		} finally {
-			try {
-				allRecordLogs.close();
+				System.out.println("Complete");
 			} catch (SQLException e) {
 				e.printStackTrace();
-			}
-		}
-//		 truncate table sinhvien in DBStaging if we had changed data
-		try {
-			ControlDB.truncateTable(ControlDB.CONTROL_DB_NAME_STAGING, ControlDB.CONTROL_DB_USER,
-					ControlDB.CONTROL_DB_PASS, "student");
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-	}
-
-	private void tranformData(ResultSet allRecordLogs, File file) throws NumberFormatException, SQLException {
-		ResultSet allValueDB_Staging = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME_STAGING,
-				ControlDB.CONTROL_DB_USER, ControlDB.CONTROL_DB_PASS, "student");
-		Student stu = new Student();
-		String regex_dob = "\\d{4}[\\/\\-](0?[1-9]|1[012])[\\/\\-](0?[1-9]|[12][0-9]|3[01])*";
-		while (allValueDB_Staging.next()) {
-			String ngaySinh = allValueDB_Staging.getString("ngay_sinh");
-			if (!Pattern.matches(regex_dob, ngaySinh))
-				continue;
-			int stt = Integer.parseInt(allValueDB_Staging.getString("stt"));
-			String mssv = allValueDB_Staging.getString("mssv");
-			String ho = allValueDB_Staging.getString("ho");
-			String ten = allValueDB_Staging.getString("ten");
-			String maLop = allValueDB_Staging.getString("ma_lop");
-			String tenLop = allValueDB_Staging.getString("ten_lop");
-			String sdt = allValueDB_Staging.getString("sdt");
-			String email = allValueDB_Staging.getString("email");
-			String queQuan = allValueDB_Staging.getString("que_quan");
-			String ghiChu = allValueDB_Staging.getString("ghi_chu");
-//			String date_expired = allValueDB_Staging.getString("date_expired");
-
-			// check in DBWareHouse, If value duplicate
-			if (ControlDB.selectOneField(ControlDB.CONTROL_DB_NAME_WAREHOUSE, ControlDB.CONTROL_DB_USER,
-					ControlDB.CONTROL_DB_PASS, "warehouse", "mssv", "mssv", mssv) != null) {
-			}
-			stu.setStt(stt);
-			stu.setMssv(mssv);
-			stu.setHo(ho);
-			stu.setTen(ten);
-			stu.setNgaySinh(ngaySinh);
-			stu.setMaLop(maLop);
-			stu.setTenLop(tenLop);
-			stu.setSdt(sdt);
-			stu.setEmail(email);
-			stu.setQueQuan(queQuan);
-			stu.setGhiChu(ghiChu);
-//				stu.setExpired(date_expired);
-			try {
-				// check insert data to DBStaging from DBWareHouse
-				if (ControlDB.insertValuesDBStagingToDBWareHouse(ControlDB.CONTROL_DB_NAME_WAREHOUSE,
-						ControlDB.CONTROL_DB_USER, ControlDB.CONTROL_DB_PASS, "student", COLUMN_LIST, stu)) {
-					// Update log when insert data success
-					ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-							ControlDB.CONTROL_DB_PASS, allRecordLogs.getInt("id"), "SU");
-
+			} finally {
+				try {
+					allRecordLogs.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
 				}
-			} catch (Exception e) {
-				System.out.println(file);
-				System.out.println(e + "error");
 			}
 		}
-	}
 
 	private boolean moveFile(File file, String target_dir) {
 		try {
