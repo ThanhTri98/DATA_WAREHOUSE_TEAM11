@@ -5,6 +5,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
@@ -17,6 +20,8 @@ import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import com.mysql.jdbc.PreparedStatement;
 
 public class DataProcess {
 	static final String NUMBER_REGEX = "^[0-9]+$";
@@ -59,7 +64,7 @@ public class DataProcess {
 			}
 			while ((line = bReader.readLine()) != null) {
 //				System.out.println(line +"2"+ delim + id_log);
-				values += readLines(line +" "+ delim + id_log, delim);
+				values += readLines(line + " " + delim + id_log, delim);
 			}
 			bReader.close();
 			return values.substring(0, values.length() - 1);
@@ -70,10 +75,15 @@ public class DataProcess {
 		}
 	}
 
-	public static void main(String[] args) {
+	public static void main(String[] args) throws ParseException {
 		DataProcess dp = new DataProcess();
-		System.out.println(dp.readValuesTXT(new File("C:\\WAREHOUSE\\ERROR_DIR\\sinhvien_sang_nhom1.txt"), 1, 11));
-//		System.out.println(dp.readValuesXLSX(new File("C:\\WAREHOUSE\\IMPORT_DIR\\sinhvien_sang_nhom11.xlsx"),1,11));
+		String regex_dob_1 = "^\\d{4}[\\/\\-](0?[1-9]|1[012])[\\/\\-](0?[1-9]|[12][0-9]|3[01])+$";
+		String regex_dob_2 = "^(0?[1-9]|[12][0-9]|3[01])+[\\/\\-](0?[1-9]|1[012])[\\/\\-]\\d{4}$";
+		System.out.println(Pattern.matches(regex_dob_2, "5/5/2525"));
+//		SimpleDateFormat sdf = new SimpleDateFormat(DATE_FORMAT);
+//		Date d1 = sdf.parse("1995-05-05");
+//		Date d2 = sdf.parse(LocalDate.now().toString());
+//		System.out.println(d1.compareTo(d2));
 	}
 
 	public String readValuesXLSX(File s_file, int id_log, int countCell) {
@@ -146,4 +156,42 @@ public class DataProcess {
 		}
 	}
 
+	public int transformData(ResultSet data_staging) {
+		// Nếu trùng mssv thì insert dòng mới và update time_expire là NOW()
+		//
+		String regex_dob_1 = "^\\d{4}[\\/\\-](0?[1-9]|1[012])[\\/\\-](0?[1-9]|[12][0-9]|3[01])+$";
+		String regex_dob_2 = "^(0?[1-9]|[12][0-9]|3[01])+[\\/\\-](0?[1-9]|1[012])[\\/\\-]\\d{4}$";
+		PreparedStatement pst = null;
+		String sql = "";
+		try {
+			while (data_staging.next()) {
+				String ngay_sinh = data_staging.getString("ngay_sinh");
+				// Kiểm tra định dạng ngày sinh yyyy/-MM/-dd or dd/-MM/-yyyy -> Đưa về định dạng
+				// yyyy-MM-dd
+				// Nếu khác thì bỏ qua bảng ghi này.
+				if (!Pattern.matches(regex_dob_1, ngay_sinh) && !Pattern.matches(regex_dob_2, ngay_sinh)) {
+					continue;
+				}
+				// Nếu là định dạng dd/-MM/-yyyy thì chuyển thành yyyy/-MM/-dd
+				if (Pattern.matches(regex_dob_2, ngay_sinh)) {
+
+				}
+				int stt = Integer.parseInt(data_staging.getString("stt"));
+				String mssv = data_staging.getString("mssv");
+				String ho = data_staging.getString("ho");
+				String ten = data_staging.getString("ten");
+				String ma_lop = data_staging.getString("ma_lop");
+				String ten_lop = data_staging.getString("ten_lop");
+				String sdt = data_staging.getString("sdt");
+				String email = data_staging.getString("email");
+				String que_quan = data_staging.getString("que_quan");
+				String ghi_chu = data_staging.getString("ghi_chu");
+				int id_log = data_staging.getInt("id_log");
+				String time_expire = "NOW()";
+			}
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+		return 0;
+	}
 }
