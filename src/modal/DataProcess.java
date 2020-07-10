@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
@@ -20,8 +19,6 @@ import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-
-import com.mysql.jdbc.PreparedStatement;
 
 import dao.ControlDB;
 
@@ -77,16 +74,6 @@ public class DataProcess {
 		}
 	}
 
-	public static void main(String[] args) throws ParseException {
-		DataProcess dp = new DataProcess();
-		String regex_dob_1 = "^\\d{4}[\\/\\-](0?[1-9]|1[012])[\\/\\-](0?[1-9]|[12][0-9]|3[01])+$";
-		String regex_dob_2 = "^(0?[1-9]|[12][0-9]|3[01])+[\\/\\-](0?[1-9]|1[012])[\\/\\-]\\d{4}$";
-		System.out.println(Pattern.matches(regex_dob_2, "5/5/2525"));
-//		SimpleDateFormat sdf = new SimpleDateFormat(DATE_FORMAT);
-//		Date d1 = sdf.parse("1995-05-05");
-//		Date d2 = sdf.parse(LocalDate.now().toString());
-//		System.out.println(d1.compareTo(d2));
-	}
 
 	public String readValuesXLSX(File s_file, int id_log, int countCell) {
 		String values = "";
