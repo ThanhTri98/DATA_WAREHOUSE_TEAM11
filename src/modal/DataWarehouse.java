@@ -1,21 +1,14 @@
 package modal;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Iterator;
+import java.util.Map;
 import java.util.StringTokenizer;
-
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.xssf.usermodel.XSSFSheet;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import java.util.regex.Pattern;
 
 import dao.ControlDB;
 import util.FileDownLib;
@@ -41,7 +34,7 @@ public class DataWarehouse {
 	static final String STAGING_PASS = conf.getStagingPass();
 	static final String STAGING_TABLE = conf.getStagingTable();
 	// logs
-	static final String COLUMN_LIST_LOGS = "file_name,config_id,file_status,staging_load_count,file_timestamp";
+	static final String COLUMN_LIST_LOGS = "file_name,config_id,file_status,staging_load_count,warehouse_load_count,file_timestamp";
 	//
 	DataProcess d_process;
 
@@ -51,11 +44,12 @@ public class DataWarehouse {
 
 	public static void main(String[] args) {
 		DataWarehouse d_warehouse = new DataWarehouse();
-		d_warehouse.downloadFile();
-		d_warehouse.ExtractToStaging();
+//		d_warehouse.downloadFile();
+//		d_warehouse.ExtractToDB();
+		d_warehouse.loadSubjects();
 	}
 
-	/*
+	/**
 	 * I. Tải file về thư mục C:\WAREHOUSE\SCP dùng SCP ### 1. Tải hoàn tất thì quét
 	 * thư mục SCP và ghi log -> file_status = ER -> Move file vừa ghi log vào
 	 * C:\WAREHOUSE\IMPORT_DIR, Kiểm tra file đó đã được import vào hệ thống
@@ -64,7 +58,7 @@ public class DataWarehouse {
 	 * ghi toàn bộ nội dung của file đó vào table student (trong DB db_staging) ->
 	 * đồng thời chuyển trạng thái file đó thành TR
 	 */
-	/*
+	/**
 	 * II. Tiến hành tranform dữ liệu ### 1. Vào bảng Logs (trong DB control_db) đọc
 	 * tất cả records, nếu rcd đó có file_status = TR -> vào bảng student (trong DB
 	 * db_staging) đọc tất cả các rcd có trường file_name = file hiện tại có
@@ -73,7 +67,7 @@ public class DataWarehouse {
 	 * đã trans = số dòng đọc lên từ file thì chuyển trạng thái file đó thành SU,
 	 * ngược lại thì ERR -> Move các file vào C:\WAREHOUSE\ERROR_DIR???
 	 */
-	/*
+	/**
 	 * III. Tiến hành ghi các file có file_status = SU vào bảng student trong DB
 	 * warehouse ### 1. Vào bảng Logs (trong DB control_db) đọc tất cả các records,
 	 * nếu rcd nào có file_status = SU thì tiến hành move dữ liệu từ bảng student
@@ -91,7 +85,7 @@ public class DataWarehouse {
 		// 1.0 Kết nối đến DB controldb -> vào table scp get các thông tin cho việc
 		// download file từ server về local
 		ResultSet rs_scp = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-				ControlDB.CONTROL_DB_PASS, "scp", null, null);
+				ControlDB.CONTROL_DB_PASS, "scp", null, null, false);
 		// 1.1Lưu vào đối tượng SCP
 		SCP scp = new SCP().getSCP(rs_scp);
 		// 1.2 Kết nối đến DB controldb -> vào table logs lấy ra danh sách các file_name
@@ -146,6 +140,7 @@ public class DataWarehouse {
 				value.append("," + CONFIG_ID);
 				value.append(",'" + file_status + "'");
 				value.append("," + -1);// staging_load_count (giá trị mặc định -1)
+				value.append("," + -1);// warehouse_load_count (giá trị mặc định -1)
 				value.append(",NOW())");
 				// 1.9 Mở kết nối DB controldb -> Insert thông tin của từng file xuống table
 				// logs
@@ -154,7 +149,7 @@ public class DataWarehouse {
 							ControlDB.CONTROL_DB_PASS, "Logs", COLUMN_LIST_LOGS, value.toString());
 					value = new StringBuilder();
 					// 1.10 Move file qua thư mục import_dir phục vụ cho bước 2.
-					moveFile(file, IMPORT_DIR);
+					d_process.moveFile(file, IMPORT_DIR);
 				} catch (SQLException e) {
 					e.printStackTrace();
 				}
@@ -163,12 +158,12 @@ public class DataWarehouse {
 		}
 	}
 
-	// II ExtractToStaging
-	public void ExtractToStaging() {
+	// II,III ExtractToStaging --> Transform --> Warehouse
+	public void ExtractToDB() {
 		System.out.println("Extract Staging...");
 		// 2.0 Lấy ra tất cả các trường có file_status=ER và lưu vào ResultSet
 		ResultSet allRecordLogs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-				ControlDB.CONTROL_DB_PASS, "LOGS", "file_status", "ER");
+				ControlDB.CONTROL_DB_PASS, "LOGS", "file_status", "ER", false);
 		try {
 			File file = null;
 			String file_name = null;
@@ -204,11 +199,11 @@ public class DataWarehouse {
 						// Cập nhật số dòng vừa load vào db_staging
 						ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
 								ControlDB.CONTROL_DB_PASS, file_id, "staging_load_count",
-								countLines(file, extention) + "");
+								d_process.countLines(file, extention) + "", true);
 						System.out.println(file_name + "--> Transforming...");
 						// Lấy toàn bộ bảng ghi trong table student từ db staging
 						ResultSet data_staging = ControlDB.selectAllField(STAGING_DB_NAME, STAGING_USER, STAGING_PASS,
-								STAGING_TABLE, null, null);
+								STAGING_TABLE, null, null, false);
 						// 2.5 Tiến hành transform dữ liệu và chuyển qua table student trong db
 						// warehouse và trả về số dòng vừa chuyển qua dw
 						int warehouse_load_count = d_process.transformData(data_staging);
@@ -218,31 +213,32 @@ public class DataWarehouse {
 						if (warehouse_load_count > 0) {
 							// Cập nhật file_status = SU
 							ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-									ControlDB.CONTROL_DB_PASS, file_id, "file_status", "SU");
+									ControlDB.CONTROL_DB_PASS, file_id, "file_status", "SU", false);
 							// Cập nhật số dòng load vào table student trong dw
 							ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
 									ControlDB.CONTROL_DB_PASS, file_id, "warehouse_load_count",
-									warehouse_load_count + "");
+									warehouse_load_count + "", true);
 							// xong thì tiến hành chuyển file chứa dữ liệu vừa rồi qua thư mục SUCCESS_DIR
-							moveFile(file, SU_DIR);
-							System.out.println(file_name+" Transform success -> SU "+warehouse_load_count+" lines");
+							d_process.moveFile(file, SU_DIR);
+							System.out
+									.println(file_name + " Transform success -> SU " + warehouse_load_count + " lines");
 						} else {
 							// Không dòng nào có tất cả các trường đúng định dạng-> tự mở file sửa
 							// Cập nhật file_status file dừa rồi là ERR_TRAN
 							ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-									ControlDB.CONTROL_DB_PASS, file_id, "file_status", "ERR_TRAN");
+									ControlDB.CONTROL_DB_PASS, file_id, "file_status", "ERR_TRAN", false);
 							// Đồng thời chuyển file vừa rồi vào thục mục ERR_DIR
-							moveFile(file, ERR_DIR);
-							System.out.println(file_name+" Transform error -> ERR_TRAN");
+							d_process.moveFile(file, ERR_DIR);
+							System.out.println(file_name + " Transform error -> ERR_TRAN");
 						}
 					}
 				} catch (SQLException e) {
 					// File không đúng format thì chịu :))
 					ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-							ControlDB.CONTROL_DB_PASS, file_id, "file_status", "ERR_STAGING");
+							ControlDB.CONTROL_DB_PASS, file_id, "file_status", "ERR_STAGING", false);
 					System.out.println(file_name + "--> ERR_STAGING");
 					// Đưa qua thư mục lỗi thâu
-					moveFile(file, ERR_DIR);
+					d_process.moveFile(file, ERR_DIR);
 					continue;
 				}
 			}
@@ -258,62 +254,64 @@ public class DataWarehouse {
 		}
 	}
 
-	private boolean moveFile(File file, String target_dir) {
+	@SuppressWarnings("static-access")
+	public void loadSubjects() {
+		// Lấy bảng ghi chưa load vào DW dựa vào field Loaded(0 chưa, 1 rồi)
+		ResultSet conf_subjects = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+				ControlDB.CONTROL_DB_PASS, "conf_subjects", "loaded", 0 + "", true);
 		try {
-			BufferedInputStream bReader = new BufferedInputStream(new FileInputStream(file));
-			BufferedOutputStream bWriter = new BufferedOutputStream(
-					new FileOutputStream(target_dir + File.separator + file.getName()));
-			byte[] buff = new byte[1024 * 10];
-			int data = 0;
-			while ((data = bReader.read(buff)) != -1) {
-				bWriter.write(buff, 0, data);
-			}
-			bReader.close();
-			bWriter.close();
-			return true;
-		} catch (IOException e) {
-			e.printStackTrace();
-			return false;
-		} finally {
-			file.delete();
-		}
-	}
-
-	private int countLines(File file, String extention) {
-		int result = 0;
-		XSSFWorkbook workBooks = null;
-		try {
-			if (extention.indexOf(EXT_TEXT) != -1) {
-				BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(file)));
-				String line;
-				while ((line = bReader.readLine()) != null) {
-					if (!line.trim().isEmpty()) {
-						result++;
-					}
-				}
-				bReader.close();
-			} else if (extention.indexOf(EXT_EXCEL) != -1) {
-				workBooks = new XSSFWorkbook(file);
-				XSSFSheet sheet = workBooks.getSheetAt(0);
-				Iterator<Row> rows = sheet.iterator();
-				rows.next();
-				while (rows.hasNext()) {
-					rows.next();
-					result++;
-				}
-			}
-			return result;
-		} catch (IOException | org.apache.poi.openxml4j.exceptions.InvalidFormatException e) {
-			e.printStackTrace();
-			return 0;
-		} finally {
-			if (workBooks != null) {
+			while (conf_subjects.next()) {
+				String path_file = conf_subjects.getString("path_file");
+				String delim = conf_subjects.getString("delim");
+				String column_list = conf_subjects.getString("column_list");
+				int id_conf_subj = conf_subjects.getInt("id");
+				int stt;
+				int ma_mh;
+				String ten_mh;
+				int tin_chi;
+				String khoa_bm_ql;
+				String khoa_bm_sd;
+				String TIME_EXPIRE = "2013-12-31";
+				StringTokenizer str;
+				String values = "";
 				try {
-					workBooks.close();
+					BufferedReader bReader = new BufferedReader(new FileReader(new File(path_file)));
+					String line = bReader.readLine();
+					Map<Integer, Subjects> Subjects_Map = ControlDB.loadSubject(W_DB_NAME, W_USER, W_PASS, "MONHOC");
+					// Kiem tra xem co phan header khong
+					if (Pattern.matches(d_process.NUMBER_REGEX, line.split(delim)[0])) {
+						bReader = new BufferedReader(new FileReader(new File(path_file)));
+					}
+					while ((line = bReader.readLine()) != null) {
+						// Nếu mà có thay đổi thì insert dòng mới và update time_expire dòng cũ thành **
+						// 2013-12-31;
+						str = new StringTokenizer(line, delim);
+						stt = Integer.parseInt(str.nextToken());
+						Subjects subj = Subjects_Map.get(stt);
+						if (!line.contains(subj.toString().trim())) {
+							ma_mh = Integer.parseInt(str.nextToken());
+							ten_mh = str.nextToken();
+							tin_chi = Integer.parseInt(str.nextToken());
+							khoa_bm_ql = str.nextToken();
+							khoa_bm_sd = "";
+							values = "(" + stt + "," + ma_mh + ",'" + ten_mh + "'," + tin_chi + ",'" + khoa_bm_ql + "',"
+									+ "'" + khoa_bm_sd + "'" + ")";
+							ControlDB.insertValues(W_DB_NAME, W_USER, W_PASS, "MONHOC", column_list, values);
+							// Update dong cũ
+							ControlDB.updateOneFieldByID(W_DB_NAME, W_USER, W_PASS, "MONHOC", "TIME_EXPIRE",
+									TIME_EXPIRE, subj.getId(), false);
+						}
+					}
+					ControlDB.updateOneFieldByID(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
+							ControlDB.CONTROL_DB_PASS, "CONF_SUBJECTS", "LOADED", 1 + "", id_conf_subj, true);
+					bReader.close();
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
+
 			}
+		} catch (SQLException e) {
+			e.printStackTrace();
 		}
 	}
 }

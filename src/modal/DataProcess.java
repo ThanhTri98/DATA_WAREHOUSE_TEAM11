@@ -1,8 +1,11 @@
 package modal;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.sql.ResultSet;
@@ -23,8 +26,8 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import dao.ControlDB;
 
 public class DataProcess {
-	static final String NUMBER_REGEX = "^[0-9]+$";
-	static final String DATE_FORMAT = "yyyy-MM-dd";
+	public static final String NUMBER_REGEX = "^[0-9]+$";
+	public static final String DATE_FORMAT = "yyyy-MM-dd";
 
 	private String readLines(String value, String delim) {
 		String values = "";
@@ -53,16 +56,23 @@ public class DataProcess {
 			if (line.indexOf("\t") != -1) {
 				delim = "\t";
 			}
-			// Kiểm tra xem tổng số trường trong file có đúng format
+			// Kiểm tra xem tổng số field trong file có đúng format
 			if (new StringTokenizer(line, delim).countTokens() != count_field) {
 				bReader.close();
 				return null;
 			}
+			// STT|Mã sinh viên|Họ lót|Tên|...-> line.split(delim)[0]="STT" không phải số
+			// nên là header -> bỏ qua line
 			if (Pattern.matches(NUMBER_REGEX, line.split(delim)[0])) { // Kiem tra xem co phan header khong
 				values += readLines(line + delim + id_log, delim);
 			}
 			while ((line = bReader.readLine()) != null) {
-//				System.out.println(line +"2"+ delim + id_log);
+				// line = 1|17130005|Đào Thị Kim|Anh|15-08-1999|DH17DTB|Công nghệ thông tin
+				// b|0123456789|17130005st@hcmuaf.edu.vn|Bến Tre|abc
+				// line + " " + delim = 1|17130005|Đào Thị Kim|Anh|15-08-1999|DH17DTB|Công nghệ
+				// thông tin b|0123456789|17130005st@hcmuaf.edu.vn|Bến Tre|abc |
+				// Nếu có field 11 thì dư khoảng trắng lên readLines() có trim(), còn 10 field
+				// thì fix lỗi out index
 				values += readLines(line + " " + delim + id_log, delim);
 			}
 			bReader.close();
@@ -141,6 +151,65 @@ public class DataProcess {
 			return values.substring(0, values.length() - 1);
 		} catch (IOException e) {
 			return null;
+		}
+	}
+
+	public boolean moveFile(File file, String target_dir) {
+		try {
+			BufferedInputStream bReader = new BufferedInputStream(new FileInputStream(file));
+			BufferedOutputStream bWriter = new BufferedOutputStream(
+					new FileOutputStream(target_dir + File.separator + file.getName()));
+			byte[] buff = new byte[1024 * 10];
+			int data = 0;
+			while ((data = bReader.read(buff)) != -1) {
+				bWriter.write(buff, 0, data);
+			}
+			bReader.close();
+			bWriter.close();
+			return true;
+		} catch (IOException e) {
+			e.printStackTrace();
+			return false;
+		} finally {
+			file.delete();
+		}
+	}
+
+	public int countLines(File file, String extention) {
+		int result = 0;
+		XSSFWorkbook workBooks = null;
+		try {
+			if (extention.indexOf(".txt") != -1) {
+				BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(file)));
+				String line;
+				while ((line = bReader.readLine()) != null) {
+					if (!line.trim().isEmpty()) {
+						result++;
+					}
+				}
+				bReader.close();
+			} else if (extention.indexOf(".xlsx") != -1) {
+				workBooks = new XSSFWorkbook(file);
+				XSSFSheet sheet = workBooks.getSheetAt(0);
+				Iterator<Row> rows = sheet.iterator();
+				rows.next();
+				while (rows.hasNext()) {
+					rows.next();
+					result++;
+				}
+			}
+			return result;
+		} catch (IOException | org.apache.poi.openxml4j.exceptions.InvalidFormatException e) {
+			e.printStackTrace();
+			return 0;
+		} finally {
+			if (workBooks != null) {
+				try {
+					workBooks.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
 		}
 	}
 
@@ -225,7 +294,7 @@ public class DataProcess {
 				stu.setSdt(sdt);
 				stu.setEmail(email);
 				stu.setQueQuan(que_quan);
-				stu.setGhiChu(ghi_chu.length()==0?"str_empty":ghi_chu);
+				stu.setGhiChu(ghi_chu.length() == 0 ? "str_empty" : ghi_chu);
 				String columnList = DataWarehouse.COLUMN_LIST + "," + "id_log" + "," + "time_expire";
 				// check insert data to DBStaging from DBWareHouse
 				if (ControlDB.insertValuesDBStagingToDBWareHouse(DataWarehouse.W_DB_NAME, DataWarehouse.W_USER,

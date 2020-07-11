@@ -4,9 +4,12 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
 
 import modal.Configuration;
 import modal.Student;
+import modal.Subjects;
 import util.ConnectionDB;
 
 public class ControlDB {
@@ -47,7 +50,7 @@ public class ControlDB {
 	}
 
 	public static ResultSet selectAllField(String db_name, String user_name, String password, String table_name,
-			String condition_name, String condition_value) {
+			String condition_name, String condition_value, boolean isInteger) {
 		ResultSet rs = null;
 		PreparedStatement pst = null;
 		try {
@@ -58,10 +61,30 @@ public class ControlDB {
 			} else {
 				sql = "SELECT * FROM " + table_name + " WHERE " + condition_name + "=?";
 				pst = connection.prepareStatement(sql);
-				pst.setString(1, condition_value);
+				if (isInteger) {
+					pst.setInt(1, Integer.parseInt(condition_value));
+				} else {
+					pst.setString(1, condition_value);
+				}
 			}
 			rs = pst.executeQuery();
 			return rs;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return null;
+		}
+	}
+
+	public static Map<Integer, Subjects> loadSubject(String db_name, String user, String pass, String table_name) {
+		Map<Integer, Subjects> map_subj = new HashMap<Integer, Subjects>();
+		ResultSet sub_rs = selectAllField(db_name, user, pass, table_name, null, null, false);
+		Subjects subj = null;
+		try {
+			while (sub_rs.next()) {
+				subj = new Subjects().getSubjects(sub_rs);
+				map_subj.put(subj.getStt(), subj);
+			}
+			return map_subj;
 		} catch (SQLException e) {
 			e.printStackTrace();
 			return null;
@@ -173,18 +196,49 @@ public class ControlDB {
 	}
 
 	public static boolean updateLogs(String db_name, String user_name, String password, int id_logs, String name_field,
-			String value) {
+			String value, boolean isInteger) {
 
 		sql = "UPDATE LOGS SET " + name_field + "=?,FILE_TIMESTAMP=NOW() WHERE ID=?";
 		try {
 			connection = ConnectionDB.createConnection(db_name, user_name, password);
 			pst = connection.prepareStatement(sql);
-			if (name_field.equals("staging_load_count") || name_field.equals("warehouse_load_count")) {
+			if (isInteger) {
 				pst.setInt(1, Integer.parseInt(value));
 			} else {
 				pst.setString(1, value);
 			}
 			pst.setInt(2, id_logs);
+			return pst.executeUpdate() > 0;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return false;
+		} finally {
+			try {
+				if (pst != null)
+					pst.close();
+				if (rs != null)
+					rs.close();
+				if (connection != null)
+					connection.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public static boolean updateOneFieldByID(String db_name, String user_name, String password, String table_name,
+			String field_name, String value, int id, boolean isInteger) {
+
+		sql = "UPDATE " + table_name + " SET " + field_name + "=? WHERE ID=?";
+		try {
+			connection = ConnectionDB.createConnection(db_name, user_name, password);
+			pst = connection.prepareStatement(sql);
+			if (isInteger) {
+				pst.setInt(1, Integer.parseInt(value));
+			} else {
+				pst.setString(1, value);
+			}
+			pst.setInt(2, id);
 			return pst.executeUpdate() > 0;
 		} catch (SQLException e) {
 			e.printStackTrace();
