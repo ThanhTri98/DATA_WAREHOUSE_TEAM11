@@ -51,7 +51,7 @@ public class DataProcess {
 		String values = "";
 		String delim = "|"; // hoặc \t
 		try {
-			BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(s_file)));
+			BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(s_file),"utf8"));
 			String line = bReader.readLine();
 			if (line.indexOf("\t") != -1) {
 				delim = "\t";
@@ -180,7 +180,7 @@ public class DataProcess {
 		XSSFWorkbook workBooks = null;
 		try {
 			if (extention.indexOf(".txt") != -1) {
-				BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(file)));
+				BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(file),"utf8"));
 				String line;
 				while ((line = bReader.readLine()) != null) {
 					if (!line.trim().isEmpty()) {
