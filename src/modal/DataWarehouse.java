@@ -2,8 +2,10 @@ package modal;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
@@ -40,13 +42,15 @@ public class DataWarehouse {
 
 	public DataWarehouse() {
 		d_process = new DataProcess();
+		SendMail.writeLogsToLocalFile("#"+SendMail.CURRENT_DATE+" "+SendMail.CURRENT_TIME);
 	}
 
 	public static void main(String[] args) {
 		DataWarehouse d_warehouse = new DataWarehouse();
-//		d_warehouse.downloadFile();
-//		d_warehouse.ExtractToDB();
+		d_warehouse.downloadFile();
+		d_warehouse.ExtractToDB();
 		d_warehouse.loadSubjects();
+		SendMail.sendMail();
 	}
 
 	/**
@@ -106,9 +110,10 @@ public class DataWarehouse {
 
 		if (isSU == 0) {
 			// 1.4 Download thành công -> tiến hành ghi log với file_status là ER
-//			System.out.println("DownFile success."); // send mail
+			SendMail.writeLogsToLocalFile("DOWNLOAD FILE - "+SendMail.CURRENT_TIME);
 			insertLog(scp.getLocalPath(), "ER");
 		} else {
+			SendMail.writeLogsToLocalFile("!!!DOWNLOAD FAIL");
 			System.out.println("Download Fail!!!"); // send mail
 		}
 
@@ -116,6 +121,7 @@ public class DataWarehouse {
 			rs_scp.close();
 			rs_file_name.close();
 		} catch (SQLException e) {
+			SendMail.writeLogsToLocalFile("  !!!"+e.getMessage());
 			e.printStackTrace();
 		}
 	}
@@ -131,6 +137,7 @@ public class DataWarehouse {
 		// File[]
 		File[] listFile = fd.listFiles();
 		for (File file : listFile) {
+			SendMail.writeLogsToLocalFile(" -> "+file.getName());
 			System.out.println(file.getName());
 			// Các file có định dạng ở dưới là hợp lệ
 			if (file.getPath().endsWith(EXT_EXCEL) || file.getPath().endsWith(EXT_TEXT)
@@ -151,15 +158,18 @@ public class DataWarehouse {
 					// 1.10 Move file qua thư mục import_dir phục vụ cho bước 2.
 					d_process.moveFile(file, IMPORT_DIR);
 				} catch (SQLException e) {
+					SendMail.writeLogsToLocalFile("  !!!"+e.getMessage());
 					e.printStackTrace();
 				}
 
 			}
 		}
+		SendMail.writeLogsToLocalFile("INSERT LOG: ER - "+SendMail.CURRENT_TIME);
 	}
 
 	// II,III ExtractToStaging --> Transform --> Warehouse
 	public void ExtractToDB() {
+		SendMail.writeLogsToLocalFile("EXTRACT TO DATABASE - "+SendMail.CURRENT_TIME);
 		System.out.println("Extract Staging...");
 		// 2.0 Lấy ra tất cả các trường có file_status=ER và lưu vào ResultSet
 		ResultSet allRecordLogs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
@@ -220,6 +230,7 @@ public class DataWarehouse {
 									warehouse_load_count + "", true);
 							// xong thì tiến hành chuyển file chứa dữ liệu vừa rồi qua thư mục SUCCESS_DIR
 							d_process.moveFile(file, SU_DIR);
+							SendMail.writeLogsToLocalFile(" -> "+file_name+" STATUS: SU");
 							System.out
 									.println(file_name + " Transform success -> SU " + warehouse_load_count + " lines");
 						} else {
@@ -229,6 +240,7 @@ public class DataWarehouse {
 									ControlDB.CONTROL_DB_PASS, file_id, "file_status", "ERR_TRAN", false);
 							// Đồng thời chuyển file vừa rồi vào thục mục ERR_DIR
 							d_process.moveFile(file, ERR_DIR);
+							SendMail.writeLogsToLocalFile(" -> "+file_name+" STATUS: ERR_TRAN");
 							System.out.println(file_name + " Transform error -> ERR_TRAN");
 						}
 					}
@@ -236,6 +248,7 @@ public class DataWarehouse {
 					// File không đúng format thì chịu :))
 					ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
 							ControlDB.CONTROL_DB_PASS, file_id, "file_status", "ERR_STAGING", false);
+					SendMail.writeLogsToLocalFile(" -> "+file_name+" STATUS: ERR_STAGING");
 					System.out.println(file_name + "--> ERR_STAGING");
 					// Đưa qua thư mục lỗi thâu
 					d_process.moveFile(file, ERR_DIR);
@@ -245,6 +258,7 @@ public class DataWarehouse {
 			System.out.println("Complete");
 		} catch (SQLException e) {
 			e.printStackTrace();
+			SendMail.writeLogsToLocalFile("  !!!"+e.getMessage());
 		} finally {
 			try {
 				allRecordLogs.close();
@@ -256,12 +270,17 @@ public class DataWarehouse {
 
 	@SuppressWarnings("static-access")
 	public void loadSubjects() {
+		SendMail.writeLogsToLocalFile("LOAD SUBJECTS - "+SendMail.CURRENT_TIME);
+		System.out.println("Start load subject");
 		// Lấy bảng ghi chưa load vào DW dựa vào field Loaded(0 chưa, 1 rồi)
 		ResultSet conf_subjects = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-				ControlDB.CONTROL_DB_PASS, "conf_subjects", "loaded", 0 + "", true);
+				ControlDB.CONTROL_DB_PASS, "conf_subjects", "loaded", "0", true);
 		try {
 			while (conf_subjects.next()) {
 				String path_file = conf_subjects.getString("path_file");
+				SendMail.writeLogsToLocalFile(" -PATH FILE: "+path_file);
+				System.out.println("File loadding...");
+				System.out.println(path_file);
 				String delim = conf_subjects.getString("delim");
 				String column_list = conf_subjects.getString("column_list");
 				int id_conf_subj = conf_subjects.getInt("id");
@@ -275,10 +294,17 @@ public class DataWarehouse {
 				StringTokenizer str;
 				String values = "";
 				try {
-					BufferedReader bReader = new BufferedReader(new FileReader(new File(path_file)));
-					String line = bReader.readLine();
+					BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(new File(path_file)),"utf8"));
+					String line = bReader.readLine(); //***
+					// Map chứa tất cả môn học hiện có trong bảng MONHOC với key là stt của môn học đó
 					Map<Integer, Subjects> Subjects_Map = ControlDB.loadSubject(W_DB_NAME, W_USER, W_PASS, "MONHOC");
-					// Kiem tra xem co phan header khong
+					if(Subjects_Map.size()==0) {
+						System.out.println("Please import default data Subjects");
+						bReader.close();
+						return;
+					}
+					// Kiểm tra để loại bỏ phần tiêu đề
+					// Nếu không có phần tiêu đề thì đặt lại con trỏ về trị trí ban đầu vì sau *** con trỏ tăng lên 1
 					if (Pattern.matches(d_process.NUMBER_REGEX, line.split(delim)[0])) {
 						bReader = new BufferedReader(new FileReader(new File(path_file)));
 					}
@@ -288,22 +314,32 @@ public class DataWarehouse {
 						str = new StringTokenizer(line, delim);
 						stt = Integer.parseInt(str.nextToken());
 						Subjects subj = Subjects_Map.get(stt);
+						// Nếu nội dung của 2 dòng là khác nhau thì thêm dòng mới với time_expire =
+						// default và cập nhật lại time_expire cũ thành 2013-12-31
 						if (!line.contains(subj.toString().trim())) {
 							ma_mh = Integer.parseInt(str.nextToken());
 							ten_mh = str.nextToken();
 							tin_chi = Integer.parseInt(str.nextToken());
 							khoa_bm_ql = str.nextToken();
 							khoa_bm_sd = "";
+							// VD: (1,2042212,'Data Warehouse',3,'CNTT','CNTT')
 							values = "(" + stt + "," + ma_mh + ",'" + ten_mh + "'," + tin_chi + ",'" + khoa_bm_ql + "',"
 									+ "'" + khoa_bm_sd + "'" + ")";
+							// Insert values vào bảng MONHOC trong DB warehouse
 							ControlDB.insertValues(W_DB_NAME, W_USER, W_PASS, "MONHOC", column_list, values);
-							// Update dong cũ
+							// Cập nhật time_expire lại cho dòng trước đó dựa vào id
 							ControlDB.updateOneFieldByID(W_DB_NAME, W_USER, W_PASS, "MONHOC", "TIME_EXPIRE",
 									TIME_EXPIRE, subj.getId(), false);
+							values = "";
+						}else {
+							SendMail.writeLogsToLocalFile("  -> DUPLICATE DATA: STT = "+stt);
+							System.out.println("Duplicate data: STT = "+stt);
 						}
 					}
+					// Cập nhật lại trạng thái loaded = 1 (đã load)
 					ControlDB.updateOneFieldByID(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
 							ControlDB.CONTROL_DB_PASS, "CONF_SUBJECTS", "LOADED", 1 + "", id_conf_subj, true);
+					System.out.println("Load Subject Complete");
 					bReader.close();
 				} catch (IOException e) {
 					e.printStackTrace();
@@ -311,6 +347,7 @@ public class DataWarehouse {
 
 			}
 		} catch (SQLException e) {
+			SendMail.writeLogsToLocalFile("  !!!"+e.getMessage());
 			e.printStackTrace();
 		}
 	}

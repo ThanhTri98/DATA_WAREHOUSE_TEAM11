@@ -4,6 +4,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
+import modal.SendMail;
+
 public class ConnectionDB {
 	public static Connection createConnection(String db_name, String user_name, String password) {
 		Connection con = null;
@@ -17,6 +19,7 @@ public class ConnectionDB {
 
 		} catch (SQLException | ClassNotFoundException e) {
 			e.printStackTrace();
+			SendMail.writeLogsToLocalFile("  !!!ERROR CONNECTED TO DATABASE");
 			return null;
 		}
 	}

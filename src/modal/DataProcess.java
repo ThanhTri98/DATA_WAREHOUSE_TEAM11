@@ -298,7 +298,7 @@ public class DataProcess {
 				String columnList = DataWarehouse.COLUMN_LIST + "," + "id_log" + "," + "time_expire";
 				// check insert data to DBStaging from DBWareHouse
 				if (ControlDB.insertValuesDBStagingToDBWareHouse(DataWarehouse.W_DB_NAME, DataWarehouse.W_USER,
-						DataWarehouse.W_PASS, "student", columnList, stu, id_log)) {
+						DataWarehouse.W_PASS, "SINHVIEN", columnList, stu, id_log)) {
 					count++;
 				}
 			}
