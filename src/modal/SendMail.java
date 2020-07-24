@@ -50,7 +50,7 @@ public class SendMail {
 	 ********************************/
 	public static String CURRENT_DATE=java.time.LocalDate.now().toString();
 	public static String CURRENT_TIME=java.time.LocalTime.now().toString().substring(0,java.time.LocalTime.now().toString().indexOf("."));
-	public static String local_path = "E:\\DW\\LOG_MAIL";
+	public static String local_path = "C:\\WAREHOUSE\\LOGS_MAIL";
 	
 	public static void writeLogsToLocalFile(String content) {
 		File file = new File(local_path+CURRENT_DATE+".txt");

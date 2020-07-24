@@ -61,7 +61,7 @@ public class DataWarehouse {
 	public static void main(String[] args) {
 		for (int i = 0; i < args.length; i++) {
 			DataWarehouse d_warehouse = new DataWarehouse(Integer.parseInt(args[i]));
-			d_warehouse.downloadFile();
+//			d_warehouse.downloadFile();
 			d_warehouse.ExtractToDB();
 //		d_warehouse.loadSubjects();
 //		SendMail.sendMail();
@@ -191,16 +191,17 @@ public class DataWarehouse {
 		System.out.println("Extract Staging...");
 		// 2.0 Lấy ra tất cả các trường có file_status=ER và lưu vào ResultSet
 		ResultSet allRecordLogs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-				ControlDB.CONTROL_DB_PASS, "LOGS", "file_status,config_id", "ER," + CONFIG_ID, "false,true");
+				ControlDB.CONTROL_DB_PASS, "LOGS", "FILE_STATUS,CONFIG_ID", "ER," + CONFIG_ID, "false,true");
 		try {
 			File file = null;
 			String file_name = null;
 			int id_log = -999; // default
 			String extention;
+			int countLines=-999;
 			while (allRecordLogs.next()) {
 				// 2.1 Lấy ra tên file và id trong bảng ghi
-				file_name = allRecordLogs.getString("file_name");
-				id_log = allRecordLogs.getInt("id");
+				file_name = allRecordLogs.getString("FILE_NAME");
+				id_log = allRecordLogs.getInt("ID");
 				String values = "";// Lưu chuỗi values
 				// 2.2 Mở đối tượng file nằm trong thư mục IMPORT_DIR dựa vào file_name
 				file = new File(IMPORT_DIR + File.separator + file_name);
@@ -208,26 +209,29 @@ public class DataWarehouse {
 						: file.getPath().endsWith(".txt") ? EXT_TEXT : EXT_CSV;
 				if (!file.exists()) // Nếu file không tồn tại thì bỏ qua và tiếp tục cho đến cuối bảng ghi
 					continue;
-				// Đếm số cột theo format trong table config
-				StringTokenizer count_Field = new StringTokenizer(COLUMN_LIST, ",");
 				// 2.3 Tiến hành đọc file và chuyển nội dung trong file thành
 				// chuỗi values (1,'a','b'),(2,'d','e'),(...)
 				// INSERT INTO TABLE VALUES chuỗi values
 				if (extention.equals(EXT_EXCEL)) {
-					values = d_process.readValuesXLSX(file, count_Field.countTokens());
+					values = d_process.readValuesXLSX(file, COLUMN_LIST);
 				} else if (extention.equals(EXT_TEXT)) {
-					values = d_process.readValuesTXT(file, count_Field.countTokens());
+					values = d_process.readValuesTXT(file, COLUMN_LIST);
 				} else if (extention.equals(EXT_CSV)) {
 				}
 				try {
+					// Tách lấy số dòng đọc lên từ file
+					if (values != null) {
+						int index = values.indexOf(DataProcess.DELIM_COUNT_LINES);
+						countLines = Integer.parseInt(values.substring(0, index));
+						values = values.replace(countLines + DataProcess.DELIM_COUNT_LINES, "");
+					}
 					// 2.4 Tiến hành insert chuỗi values xuống table student trong db_staging đồng
 					// thời transform rồi đưa qua warehouse
 					if (ControlDB.insertValues(STAGING_DB_NAME, STAGING_USER, STAGING_PASS, STAGING_TABLE, COLUMN_LIST,
 							values)) {
 						// Cập nhật số dòng vừa load vào db_staging
 						ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-								ControlDB.CONTROL_DB_PASS, id_log, "staging_load_count",
-								d_process.countLines(file, extention) + "", true);
+								ControlDB.CONTROL_DB_PASS, id_log, "STAGING_LOAD_COUNT", countLines + "", true);
 						System.out.println(file_name + "--> Transforming...");
 						// Lấy toàn bộ bảng ghi trong table student từ db staging
 //						ResultSet data_staging = ControlDB.selectAllField(STAGING_DB_NAME, STAGING_USER, STAGING_PASS,
@@ -242,10 +246,10 @@ public class DataWarehouse {
 						if (warehouse_load_count > 0) {
 							// Cập nhật file_status = SU
 							ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-									ControlDB.CONTROL_DB_PASS, id_log, "file_status", "SU", false);
+									ControlDB.CONTROL_DB_PASS, id_log, "FILE_STATUS", "SU", false);
 							// Cập nhật số dòng load vào table student trong dw
 							ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-									ControlDB.CONTROL_DB_PASS, id_log, "warehouse_load_count",
+									ControlDB.CONTROL_DB_PASS, id_log, "WAREHOUSE_LOAD_COUNT",
 									warehouse_load_count + "", true);
 							// xong thì tiến hành chuyển file chứa dữ liệu vừa rồi qua thư mục SUCCESS_DIR
 							d_process.moveFile(file, SU_DIR);
@@ -256,17 +260,17 @@ public class DataWarehouse {
 							// Không dòng nào có tất cả các trường đúng định dạng-> tự mở file sửa
 							// Cập nhật file_status file dừa rồi là ERR_TRAN
 							ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-									ControlDB.CONTROL_DB_PASS, id_log, "file_status", "ERR_TRAN", false);
+									ControlDB.CONTROL_DB_PASS, id_log, "FILE_STATUS", "ERR_TRAN", false);
 							// Đồng thời chuyển file vừa rồi vào thục mục ERR_DIR
 							d_process.moveFile(file, ERR_DIR);
 							SendMail.writeLogsToLocalFile(" -> " + file_name + " STATUS: ERR_TRAN");
 							System.out.println(file_name + " Transform error -> ERR_TRAN");
 						}
 					}
-				} catch (SQLException e) {
+				} catch (SQLException | NumberFormatException e) {
 					// File không đúng format thì chịu :))
 					ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-							ControlDB.CONTROL_DB_PASS, id_log, "file_status", "ERR_STAGING", false);
+							ControlDB.CONTROL_DB_PASS, id_log, "FILE_STATUS", "ERR_STAGING", false);
 					SendMail.writeLogsToLocalFile(" -> " + file_name + " STATUS: ERR_STAGING");
 					System.out.println(file_name + "--> ERR_STAGING");
 					// Đưa qua thư mục lỗi thâu

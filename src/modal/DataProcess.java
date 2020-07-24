@@ -28,11 +28,16 @@ import dao.ControlDB;
 public class DataProcess {
 	public static final String NUMBER_REGEX = "^[0-9]+$";
 	public static final String DATE_FORMAT = "yyyy-MM-dd";
+	public static final String DELIM_COUNT_LINES = "$&$";
+	private boolean dropFirstField = true;
 
 	private String readLines(String value, String delim) {
 		String values = "";
 		StringTokenizer stoken = new StringTokenizer(value, delim);
-		stoken.nextToken(); // Bo field stt
+		if (this.dropFirstField) {
+			stoken.nextToken(); // Bỏ Field STT trong file
+			this.dropFirstField = true;
+		}
 		int countToken = stoken.countTokens();
 		String lines = "(";
 		String token = "";
@@ -46,9 +51,12 @@ public class DataProcess {
 	}
 
 	public String readValuesTXT(File s_file, int count_field) {
+	public String readValuesTXT(File s_file, String column_list) {
 		if (!s_file.exists()) {
 			return null;
 		}
+		int count_field = new StringTokenizer(column_list, ",").countTokens();
+		int countLines=0;
 		String values = "";
 		String delim = "|"; // hoặc \t
 		try {
@@ -58,7 +66,12 @@ public class DataProcess {
 				delim = "\t";
 			}
 			// Kiểm tra xem tổng số field trong file có đúng format
-			if (new StringTokenizer(line, delim).countTokens() != count_field + 1) {
+			if (!column_list.split(",")[0].equalsIgnoreCase(("STT"))) {
+				count_field++;
+			} else {
+				this.dropFirstField = false;
+			}
+			if (new StringTokenizer(line, delim).countTokens() != count_field) {
 				bReader.close();
 				return null;
 			}
@@ -66,6 +79,7 @@ public class DataProcess {
 			// nên là header -> bỏ qua line
 			if (Pattern.matches(NUMBER_REGEX, line.split(delim)[0])) { // Kiem tra xem co phan header khong
 				values += readLines(line, delim);
+				countLines++;
 			}
 			while ((line = bReader.readLine()) != null) {
 				// line = 1|17130005|Đào Thị Kim|Anh|15-08-1999|DH17DTB|Công nghệ thông tin
@@ -75,47 +89,64 @@ public class DataProcess {
 				// Nếu có field 11 thì dư khoảng trắng lên readLines() có trim(), còn 10 field
 				// thì fix lỗi out index
 				values += readLines(line + " ", delim);
+				countLines++;
 			}
 			bReader.close();
-			return values.substring(0, values.length() - 1);
+			return countLines+DELIM_COUNT_LINES+values.substring(0, values.length() - 1);
 
 		} catch (NoSuchElementException | IOException e) {
 			e.printStackTrace();
 			return null;
 		}
 	}
-
+/*
 	public static void main(String[] args) {
 		DataProcess d = new DataProcess();
-		// E:\DW\ERROR_DIR\STUDENT\sinhvien_sang_nhom11.xlsx
-//E:\DW\ERROR_DIR\\CLASS\lophoc_sang_nhom12_2020.xlsx
-		System.out.println(d.readValuesXLSX(new File("E:\\DW\\ERROR_DIR\\STUDENT\\sinhvien_sang_nhom14.xlsx"), 10));
+		// mssv,ho,ten,ngay_sinh,ma_lop,ten_lop,sdt,email,que_quan,ghi_chu
+		// stt,ma_mh,ten_mh,tin_chi,khoa_bm_ql,khoa_bm_sd
+		// ma_dk,mssv,ma_lh,ngay_dk
+		// ma_lh,ma_mh,nam_hoc
+		String values  =d.readValuesXLSX(new File("C:\\WAREHOUSE\\IMPORT_DIR\\STUDENT\\sinhvien_sang_nhom11.xlsx"),
+				"mssv,ho,ten,ngay_sinh,ma_lop,ten_lop,sdt,email,que_quan,ghi_chu");
+		int index = values.indexOf(DELIM_COUNT_LINES);
+		int countLines = Integer.parseInt(values.substring(0, index));
+		values = values.replace(countLines+DELIM_COUNT_LINES, "..");
+		System.out.println(countLines + DELIM_COUNT_LINES);
+		System.out.println(values);
 	}
-
-	public String readValuesXLSX(File s_file, int countCell) {
+*/
+	public String readValuesXLSX(File s_file, String column_list) {
+		if(!s_file.exists()) {
+			SendMail.writeLogsToLocalFile("  --> File is not exists: "+s_file.getName());
+			return null;
+		}
 		String values = "";
 		String value = "";
 		String delim_xlsx = "|";
 		int count_str_empty = 0;
-		StringTokenizer countSub;
+		int countCell = new StringTokenizer(column_list, ",").countTokens();
+		int countLines=0;
+		StringTokenizer countSubStr;
 		try {
 			FileInputStream fileIn = new FileInputStream(s_file);
 			XSSFWorkbook workBooks = new XSSFWorkbook(fileIn);
 			XSSFSheet sheet = workBooks.getSheetAt(0);
 			Iterator<Row> rows = sheet.iterator();
-			if (rows.next().cellIterator().next().getCellType().equals(CellType.NUMERIC)) { // Kiem tra xem co phan
+			Row rowCheck = rows.next();
+			// Kiem tra xem file co dung format hay chua dua vao so cell trong file
+			if (rowCheck.getLastCellNum() < countCell || rowCheck.getLastCellNum() > countCell + 1) {
+				System.out.println(rowCheck.getLastCellNum());
+				SendMail.writeLogsToLocalFile("  --> File is not format: "+s_file.getName());
+				workBooks.close();
+				return null;
+			}
+			if (rowCheck.cellIterator().next().getCellType().equals(CellType.NUMERIC)) { // Kiem tra xem co phan
 																							// header khong
 				rows = sheet.iterator();// vi goi rows.next thi cur index =1, neu khong co header thi set lại cur index
 										// =0
 			}
 			while (rows.hasNext()) {
 				Row row = rows.next();
-				// Kiem tra xem file co dung format hay chua dua vao so cell trong file
-				if (row.getLastCellNum() < countCell || row.getLastCellNum() > countCell + 1) {
-					SendMail.writeLogsToLocalFile(s_file.getName() + ": File is not format!!");
-					workBooks.close();
-					return null;
-				}
 				Iterator<Cell> cells = row.cellIterator();
 				while (cells.hasNext()) {
 					Cell cell = cells.next();
@@ -156,16 +187,17 @@ public class DataProcess {
 				if (row.getLastCellNum() == countCell) {
 					value += "str_empty" + delim_xlsx;
 				}
-				countSub = new StringTokenizer(value, delim_xlsx);
-				if (count_str_empty != countCell + 1 && row.getLastCellNum() == countSub.countTokens()) {
+				countSubStr = new StringTokenizer(value, delim_xlsx);
+				if (count_str_empty != countCell + 1 && countSubStr.countTokens()==countCell+1) {
 					values += readLines(value, delim_xlsx);
+					countLines++;
 				}
 				value = "";
 				count_str_empty = 0;
 			}
 			workBooks.close();
 			fileIn.close();
-			return values.substring(0, values.length() - 1);
+			return countLines+DELIM_COUNT_LINES+values.substring(0, values.length() - 1);
 		} catch (IOException e) {
 			return null;
 		}
@@ -192,6 +224,7 @@ public class DataProcess {
 		}
 	}
 
+	/*
 	public int countLines(File file, String extention) {
 		int result = 0;
 		XSSFWorkbook workBooks = null;
@@ -229,7 +262,7 @@ public class DataProcess {
 			}
 		}
 	}
-
+*/
 	private String convertDate(String date) {
 		String result = "";
 		String delim = "/";
@@ -253,17 +286,16 @@ public class DataProcess {
 //			}
 //			result = dateArr[0] + "/" + dateArr[1] + "/" + dateArr[2];
 //		}
-			// 5/-5/-2525 -> 05/05/2525
-			for (int i = 0; i < dateArr.length - 1; i++) {
-				if (dateArr[i].length() == 1) {
-					dateArr[i] = "0" + dateArr[i];
-				}
+		// 5/-5/-2525 -> 05/05/2525
+		for (int i = 0; i < dateArr.length - 1; i++) {
+			if (dateArr[i].length() == 1) {
+				dateArr[i] = "0" + dateArr[i];
 			}
-			result = dateArr[2] + "/" + dateArr[1] + "/" + dateArr[0];
+		}
+		result = dateArr[2] + "/" + dateArr[1] + "/" + dateArr[0];
 
 		return result;
 	}
-
 	public int transformData(ResultSet data_staging, int id_log) {
 		// Nếu trùng mssv thì insert dòng mới và update time_expire là NOW()
 		//
