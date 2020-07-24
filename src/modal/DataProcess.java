@@ -220,22 +220,22 @@ public class DataProcess {
 			delim = "-";
 		}
 		String[] dateArr = date.split(delim);
-		if (dateArr[0].length() == 4 && delim == "/") { // 2525/05/05 ?? 2525/5/5
-			// 5/-5/-2525 -> 05/05/2525
-			for (int i = 1; i < dateArr.length; i++) {
-				if (dateArr[i].length() == 1) {
-					dateArr[i] = "0" + dateArr[i];
-				}
-			}
-			result = dateArr[0] + "/" + dateArr[1] + "/" + dateArr[2];
-		} else if (dateArr[0].length() == 4 && delim == "-") { // 2525-05-05 -> 2525/05/05
-			for (int i = 1; i < dateArr.length; i++) {
-				if (dateArr[i].length() == 1) {
-					dateArr[i] = "0" + dateArr[i];
-				}
-			}
-			result = dateArr[0] + "/" + dateArr[1] + "/" + dateArr[2];
-		} else {
+//		if (dateArr[0].length() == 4 && delim == "/") { // 2525/05/05 ?? 2525/5/5
+//			// 5/-5/-2525 -> 05/05/2525
+//			for (int i = 1; i < dateArr.length; i++) {
+//				if (dateArr[i].length() == 1) {
+//					dateArr[i] = "0" + dateArr[i];
+//				}
+//			}
+//			result = dateArr[0] + "/" + dateArr[1] + "/" + dateArr[2];
+//		} else if (dateArr[0].length() == 4 && delim == "-") { // 2525-05-05 -> 2525/05/05
+//			for (int i = 1; i < dateArr.length; i++) {
+//				if (dateArr[i].length() == 1) {
+//					dateArr[i] = "0" + dateArr[i];
+//				}
+//			}
+//			result = dateArr[0] + "/" + dateArr[1] + "/" + dateArr[2];
+//		}
 			// 5/-5/-2525 -> 05/05/2525
 			for (int i = 0; i < dateArr.length - 1; i++) {
 				if (dateArr[i].length() == 1) {
@@ -243,7 +243,6 @@ public class DataProcess {
 				}
 			}
 			result = dateArr[2] + "/" + dateArr[1] + "/" + dateArr[0];
-		}
 
 		return result;
 	}
