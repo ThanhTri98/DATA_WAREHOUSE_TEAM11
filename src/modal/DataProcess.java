@@ -248,11 +248,11 @@ public class DataProcess {
 		return result;
 	}
 
-	public int transformData(ResultSet data_staging) {
+	public int transformData(ResultSet data_staging,int id_log) {
 		// Nếu trùng mssv thì insert dòng mới và update time_expire là NOW()
 		//
-		String regex_dob_1 = "^\\d{4}[\\/\\-](0?[1-9]|1[012])[\\/\\-](0?[1-9]|[12][0-9]|3[01])+$";
-		String regex_dob_2 = "^(0?[1-9]|[12][0-9]|3[01])+[\\/\\-](0?[1-9]|1[012])[\\/\\-]\\d{4}$";
+		String regex_date_1 = "^\\d{4}[\\/\\-](0?[1-9]|1[012])[\\/\\-](0?[1-9]|[12][0-9]|3[01])+$";
+		String regex_date_2 = "^(0?[1-9]|[12][0-9]|3[01])+[\\/\\-](0?[1-9]|1[012])[\\/\\-]\\d{4}$";
 		int count = 0;
 		Student stu = new Student();
 		try {
@@ -261,7 +261,7 @@ public class DataProcess {
 				// Kiểm tra định dạng ngày sinh yyyy/-MM/-dd or dd/-MM/-yyyy -> Đưa về định dạng
 				// yyyy/MM/dd
 				// Nếu khác thì bỏ qua bảng ghi này.
-				if (!Pattern.matches(regex_dob_1, ngay_sinh) && !Pattern.matches(regex_dob_2, ngay_sinh)) {
+				if (!Pattern.matches(regex_date_1, ngay_sinh) && !Pattern.matches(regex_date_2, ngay_sinh)) {
 					continue;
 				}
 				// Nếu là định dạng dd/-MM/-yyyy or yyyy-MM-dd thì chuyển thành yyyy/MM/dd
@@ -276,7 +276,6 @@ public class DataProcess {
 				String email = data_staging.getString("email");
 				String que_quan = data_staging.getString("que_quan");
 				String ghi_chu = data_staging.getString("ghi_chu");
-				int id_log = data_staging.getInt("id_log");
 
 				// check in DBWareHouse, If value duplicate
 //				if (ControlDB.selectOneField(DataWarehouse.W_DB_NAME, DataWarehouse.W_USER, DataWarehouse.W_PASS,
