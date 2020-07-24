@@ -45,6 +45,7 @@ public class DataWarehouse {
 		IMPORT_DIR = conf.getImportDir();
 		SU_DIR = conf.getSuccessDir();
 		ERR_DIR = conf.getErrorDir();
+		COLUMN_LIST = conf.getColmnList();
 		W_DB_NAME = conf.getWarehouseDBName();
 		W_USER = conf.getWarehouseUser();
 		W_PASS = conf.getWarehousePass();
@@ -58,11 +59,13 @@ public class DataWarehouse {
 	}
 
 	public static void main(String[] args) {
-		DataWarehouse d_warehouse = new DataWarehouse(4);
-		d_warehouse.downloadFile();
-//		d_warehouse.ExtractToDB();
+		for (int i = 0; i < args.length; i++) {
+			DataWarehouse d_warehouse = new DataWarehouse(Integer.parseInt(args[i]));
+			d_warehouse.downloadFile();
+			d_warehouse.ExtractToDB();
 //		d_warehouse.loadSubjects();
 //		SendMail.sendMail();
+		}
 	}
 
 	/**
@@ -101,10 +104,10 @@ public class DataWarehouse {
 		// 1.0 Kết nối đến DB controldb -> vào table scp get các thông tin cho việc
 		// download file từ server về local
 		ResultSet rs_scp = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-				ControlDB.CONTROL_DB_PASS, "SCP", "CONFIG_ID", CONFIG_ID + "", true);
+				ControlDB.CONTROL_DB_PASS, "SCP", "CONFIG_ID", CONFIG_ID + "", "true");
 		// 1.1Lưu vào đối tượng SCP
 		SCP scp = new SCP().getSCP(rs_scp);
-		if(scp==null) { // Cho trường hợp không download file Subject
+		if (scp == null) { // Cho trường hợp không download file Subject
 			System.out.println("Null download");
 			return;
 		}
@@ -188,7 +191,7 @@ public class DataWarehouse {
 		System.out.println("Extract Staging...");
 		// 2.0 Lấy ra tất cả các trường có file_status=ER và lưu vào ResultSet
 		ResultSet allRecordLogs = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-				ControlDB.CONTROL_DB_PASS, "LOGS", "file_status", "ER", false);
+				ControlDB.CONTROL_DB_PASS, "LOGS", "file_status,config_id", "ER," + CONFIG_ID, "false,true");
 		try {
 			File file = null;
 			String file_name = null;
@@ -211,27 +214,28 @@ public class DataWarehouse {
 				// chuỗi values (1,'a','b'),(2,'d','e'),(...)
 				// INSERT INTO TABLE VALUES chuỗi values
 				if (extention.equals(EXT_EXCEL)) {
-					values = d_process.readValuesXLSX(file, id_log, count_Field.countTokens());
+					values = d_process.readValuesXLSX(file, count_Field.countTokens());
 				} else if (extention.equals(EXT_TEXT)) {
-					values = d_process.readValuesTXT(file, id_log, count_Field.countTokens());
+					values = d_process.readValuesTXT(file, count_Field.countTokens());
 				} else if (extention.equals(EXT_CSV)) {
 				}
 				try {
 					// 2.4 Tiến hành insert chuỗi values xuống table student trong db_staging đồng
 					// thời transform rồi đưa qua warehouse
-					if (ControlDB.insertValues(STAGING_DB_NAME, STAGING_USER, STAGING_PASS, STAGING_TABLE,
-							COLUMN_LIST + ",id_log", values)) {
+					if (ControlDB.insertValues(STAGING_DB_NAME, STAGING_USER, STAGING_PASS, STAGING_TABLE, COLUMN_LIST,
+							values)) {
 						// Cập nhật số dòng vừa load vào db_staging
 						ControlDB.updateLogs(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
 								ControlDB.CONTROL_DB_PASS, id_log, "staging_load_count",
 								d_process.countLines(file, extention) + "", true);
 						System.out.println(file_name + "--> Transforming...");
 						// Lấy toàn bộ bảng ghi trong table student từ db staging
-						ResultSet data_staging = ControlDB.selectAllField(STAGING_DB_NAME, STAGING_USER, STAGING_PASS,
-								STAGING_TABLE, null, null, false);
+//						ResultSet data_staging = ControlDB.selectAllField(STAGING_DB_NAME, STAGING_USER, STAGING_PASS,
+//								STAGING_TABLE, null, null, null);
 						// 2.5 Tiến hành transform dữ liệu và chuyển qua table student trong db
 						// warehouse và trả về số dòng vừa chuyển qua dw
-						int warehouse_load_count = d_process.transformData(data_staging,id_log);
+//						int warehouse_load_count = d_process.transformData(data_staging, id_log);
+						int warehouse_load_count = 0;
 						// Update log when insert data success
 						// Nếu số dòng lớn hơn 0 có nghĩa là không có trường nào bị lỗi format ( trans
 						// thành công ít nhất 1 dòng)
@@ -289,7 +293,7 @@ public class DataWarehouse {
 		System.out.println("Start load subject");
 		// Lấy bảng ghi chưa load vào DW dựa vào field Loaded(0 chưa, 1 rồi)
 		ResultSet conf_subjects = ControlDB.selectAllField(ControlDB.CONTROL_DB_NAME, ControlDB.CONTROL_DB_USER,
-				ControlDB.CONTROL_DB_PASS, "conf_subjects", "loaded", "0", true);
+				ControlDB.CONTROL_DB_PASS, "conf_subjects", "loaded", "0", "true");
 		try {
 			while (conf_subjects.next()) {
 				String path_file = conf_subjects.getString("path_file");

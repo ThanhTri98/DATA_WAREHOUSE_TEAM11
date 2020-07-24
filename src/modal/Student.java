@@ -4,7 +4,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 public class Student {
-	private int stt;
 	private String mssv;
 	private String ho;
 	private String ten;
@@ -15,14 +14,6 @@ public class Student {
 	private String email;
 	private String queQuan;
 	private String ghiChu;
-
-	public int getStt() {
-		return stt;
-	}
-
-	public void setStt(int stt) {
-		this.stt = stt;
-	}
 
 	public String getMssv() {
 		return mssv;
@@ -109,7 +100,6 @@ public class Student {
 		try {
 			rs.next();
 			stu = new Student();
-			stu.setStt(Integer.parseInt(rs.getString("stt")));
 			stu.setMssv(rs.getString("mssv"));
 			stu.setHo(rs.getString("ho"));
 			stu.setTen(rs.getString("ten"));

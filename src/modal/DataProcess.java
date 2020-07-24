@@ -32,6 +32,7 @@ public class DataProcess {
 	private String readLines(String value, String delim) {
 		String values = "";
 		StringTokenizer stoken = new StringTokenizer(value, delim);
+		stoken.nextToken(); // Bo field stt
 		int countToken = stoken.countTokens();
 		String lines = "(";
 		String token = "";
@@ -44,27 +45,27 @@ public class DataProcess {
 		return values;
 	}
 
-	public String readValuesTXT(File s_file, int id_log, int count_field) {
+	public String readValuesTXT(File s_file, int count_field) {
 		if (!s_file.exists()) {
 			return null;
 		}
 		String values = "";
 		String delim = "|"; // hoặc \t
 		try {
-			BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(s_file),"utf8"));
+			BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(s_file), "utf8"));
 			String line = bReader.readLine();
 			if (line.indexOf("\t") != -1) {
 				delim = "\t";
 			}
 			// Kiểm tra xem tổng số field trong file có đúng format
-			if (new StringTokenizer(line, delim).countTokens() != count_field) {
+			if (new StringTokenizer(line, delim).countTokens() != count_field + 1) {
 				bReader.close();
 				return null;
 			}
 			// STT|Mã sinh viên|Họ lót|Tên|...-> line.split(delim)[0]="STT" không phải số
 			// nên là header -> bỏ qua line
 			if (Pattern.matches(NUMBER_REGEX, line.split(delim)[0])) { // Kiem tra xem co phan header khong
-				values += readLines(line + delim + id_log, delim);
+				values += readLines(line, delim);
 			}
 			while ((line = bReader.readLine()) != null) {
 				// line = 1|17130005|Đào Thị Kim|Anh|15-08-1999|DH17DTB|Công nghệ thông tin
@@ -73,7 +74,7 @@ public class DataProcess {
 				// thông tin b|0123456789|17130005st@hcmuaf.edu.vn|Bến Tre|abc |
 				// Nếu có field 11 thì dư khoảng trắng lên readLines() có trim(), còn 10 field
 				// thì fix lỗi out index
-				values += readLines(line + " " + delim + id_log, delim);
+				values += readLines(line + " ", delim);
 			}
 			bReader.close();
 			return values.substring(0, values.length() - 1);
@@ -84,10 +85,19 @@ public class DataProcess {
 		}
 	}
 
-	public String readValuesXLSX(File s_file, int id_log, int countCell) {
+	public static void main(String[] args) {
+		DataProcess d = new DataProcess();
+		// E:\DW\ERROR_DIR\STUDENT\sinhvien_sang_nhom11.xlsx
+//E:\DW\ERROR_DIR\\CLASS\lophoc_sang_nhom12_2020.xlsx
+		System.out.println(d.readValuesXLSX(new File("E:\\DW\\ERROR_DIR\\STUDENT\\sinhvien_sang_nhom14.xlsx"), 10));
+	}
+
+	public String readValuesXLSX(File s_file, int countCell) {
 		String values = "";
 		String value = "";
 		String delim_xlsx = "|";
+		int count_str_empty = 0;
+		StringTokenizer countSub;
 		try {
 			FileInputStream fileIn = new FileInputStream(s_file);
 			XSSFWorkbook workBooks = new XSSFWorkbook(fileIn);
@@ -101,7 +111,8 @@ public class DataProcess {
 			while (rows.hasNext()) {
 				Row row = rows.next();
 				// Kiem tra xem file co dung format hay chua dua vao so cell trong file
-				if (row.getLastCellNum() < countCell - 1 || row.getLastCellNum() > countCell) {
+				if (row.getLastCellNum() < countCell || row.getLastCellNum() > countCell + 1) {
+					SendMail.writeLogsToLocalFile(s_file.getName() + ": File is not format!!");
 					workBooks.close();
 					return null;
 				}
@@ -129,22 +140,28 @@ public class DataProcess {
 						case STRING:
 							value += cell.getStringCellValue() + delim_xlsx;
 							break;
+						case BLANK:
 						default:
-							value += " " + delim_xlsx;
+							value += "str_empty" + delim_xlsx;
 							break;
 						}
 						break;
 					case BLANK:
 					default:
-						value += " " + delim_xlsx;
+						count_str_empty++;
+						value += "str_empty" + delim_xlsx;
 						break;
 					}
 				}
-				if (row.getLastCellNum() == countCell - 1) {
-					value += " |";
+				if (row.getLastCellNum() == countCell) {
+					value += "str_empty" + delim_xlsx;
 				}
-				values += readLines(value + id_log, delim_xlsx);
+				countSub = new StringTokenizer(value, delim_xlsx);
+				if (count_str_empty != countCell + 1 && row.getLastCellNum() == countSub.countTokens()) {
+					values += readLines(value, delim_xlsx);
+				}
 				value = "";
+				count_str_empty = 0;
 			}
 			workBooks.close();
 			fileIn.close();
@@ -180,7 +197,7 @@ public class DataProcess {
 		XSSFWorkbook workBooks = null;
 		try {
 			if (extention.indexOf(".txt") != -1) {
-				BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(file),"utf8"));
+				BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(file), "utf8"));
 				String line;
 				while ((line = bReader.readLine()) != null) {
 					if (!line.trim().isEmpty()) {
@@ -248,7 +265,7 @@ public class DataProcess {
 		return result;
 	}
 
-	public int transformData(ResultSet data_staging,int id_log) {
+	public int transformData(ResultSet data_staging, int id_log) {
 		// Nếu trùng mssv thì insert dòng mới và update time_expire là NOW()
 		//
 		String regex_date_1 = "^\\d{4}[\\/\\-](0?[1-9]|1[012])[\\/\\-](0?[1-9]|[12][0-9]|3[01])+$";
@@ -266,7 +283,6 @@ public class DataProcess {
 				}
 				// Nếu là định dạng dd/-MM/-yyyy or yyyy-MM-dd thì chuyển thành yyyy/MM/dd
 				ngay_sinh = convertDate(ngay_sinh);
-				int stt = Integer.parseInt(data_staging.getString("stt"));
 				String mssv = data_staging.getString("mssv");
 				String ho = data_staging.getString("ho");
 				String ten = data_staging.getString("ten");
@@ -283,7 +299,6 @@ public class DataProcess {
 //					System.out.println("Duplicate mssv");
 //					continue;
 //				}
-				stu.setStt(stt);
 				stu.setMssv(mssv);
 				stu.setHo(ho);
 				stu.setTen(ten);
