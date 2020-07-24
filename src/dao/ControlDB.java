@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -51,22 +52,46 @@ public class ControlDB {
 	}
 
 	public static ResultSet selectAllField(String db_name, String user_name, String password, String table_name,
-			String condition_name, String condition_value, boolean isInteger) {
+			String condition_name, String condition_value, String isInteger) {
 		ResultSet rs = null;
+//		System.out.println(condition_name.toString());
+//		System.out.println(condition_value.toString());
+//		System.out.println(isInteger.toString());
 		PreparedStatement pst = null;
+		boolean isLastIndex = false;
 		try {
 			connection = ConnectionDB.createConnection(db_name, user_name, password);
 			if (condition_name == null) {
 				sql = "SELECT * FROM " + table_name;
 				pst = connection.prepareStatement(sql);
 			} else {
-				sql = "SELECT * FROM " + table_name + " WHERE " + condition_name + "=?";
-				pst = connection.prepareStatement(sql);
-				if (isInteger) {
-					pst.setInt(1, Integer.parseInt(condition_value));
-				} else {
-					pst.setString(1, condition_value);
+				sql = "SELECT * FROM " + table_name + " WHERE ";
+				String[] con_name = condition_name.split(",");
+				String[] con_value = condition_value.split(",");
+				String[] isInt = isInteger.split(",");
+				for (int i = 0; i < con_name.length; i++) {
+					if (!isLastIndex) {
+						if (i == 0) {
+							sql += con_name[i] + "=?";
+						} else {
+							sql += " AND " + con_name[i] + "=?";
+						}
+						if (i == con_name.length - 1) {
+							pst = connection.prepareStatement(sql);
+							isLastIndex = true;
+							i = -1;
+						} else {
+							continue;
+						}
+					} else {
+						if (isInt[i].equals("true")) {
+							pst.setInt(i + 1, Integer.parseInt(con_value[i]));
+						} else {
+							pst.setString(i + 1, con_value[i]);
+						}
+					}
 				}
+
 			}
 			rs = pst.executeQuery();
 			return rs;
@@ -78,7 +103,7 @@ public class ControlDB {
 
 	public static Map<Integer, Subjects> loadSubject(String db_name, String user, String pass, String table_name) {
 		Map<Integer, Subjects> map_subj = new HashMap<Integer, Subjects>();
-		ResultSet sub_rs = selectAllField(db_name, user, pass, table_name, null, null, false);
+		ResultSet sub_rs = selectAllField(db_name, user, pass, table_name, null, null, null);
 		Subjects subj = null;
 		try {
 			while (sub_rs.next()) {
@@ -116,21 +141,20 @@ public class ControlDB {
 	public static boolean insertValuesDBStagingToDBWareHouse(String db_name, String user_name, String password,
 			String table_name, String column_list, Student stu, int id_log) {
 		try {
-			sql = "INSERT INTO " + table_name + "(" + column_list + ") VALUES " + "(?,?,?,?,?,?,?,?,?,?,?,?,NOW())";
+			sql = "INSERT INTO " + table_name + "(" + column_list + ") VALUES " + "(?,?,?,?,?,?,?,?,?,?,?,NOW())";
 			connection = ConnectionDB.createConnection(db_name, user_name, password);
 			pst = connection.prepareStatement(sql);
-			pst.setInt(1, stu.getStt());
-			pst.setString(2, stu.getMssv());
-			pst.setString(3, stu.getHo());
-			pst.setString(4, stu.getTen());
-			pst.setString(5, stu.getNgaySinh());
-			pst.setString(6, stu.getMaLop());
-			pst.setString(7, stu.getTenLop());
-			pst.setString(8, stu.getSdt());
-			pst.setString(9, stu.getEmail());
-			pst.setString(10, stu.getQueQuan());
-			pst.setString(11, stu.getGhiChu());
-			pst.setInt(12, id_log);
+			pst.setString(1, stu.getMssv());
+			pst.setString(2, stu.getHo());
+			pst.setString(3, stu.getTen());
+			pst.setString(4, stu.getNgaySinh());
+			pst.setString(5, stu.getMaLop());
+			pst.setString(6, stu.getTenLop());
+			pst.setString(7, stu.getSdt());
+			pst.setString(8, stu.getEmail());
+			pst.setString(9, stu.getQueQuan());
+			pst.setString(10, stu.getGhiChu());
+			pst.setInt(11, id_log);
 			int result = pst.executeUpdate();
 			return result > 0;
 		} catch (SQLException e1) {
