@@ -9,7 +9,6 @@ public class Configuration {
 	private String SuccessDir;
 	private String errorDir;
 	private String colmnList;
-	private String delimiter;
 	private String warehouseDBName;
 	private String warehouseUser;
 	private String warehousePass;
@@ -59,13 +58,6 @@ public class Configuration {
 		this.colmnList = colmnList;
 	}
 
-	public String getDelimiter() {
-		return delimiter;
-	}
-
-	public void setDelimiter(String delimiter) {
-		this.delimiter = delimiter;
-	}
 
 	public String getWarehouseDBName() {
 		return warehouseDBName;
@@ -141,7 +133,6 @@ public class Configuration {
 			conf.setSuccessDir(rs.getString("success_dir"));
 			conf.setErrorDir(rs.getString("error_dir"));
 			conf.setColmnList(rs.getString("column_list"));
-			conf.setDelimiter(rs.getString("delimiter"));
 			conf.setWarehouseTable(rs.getString("warehouse_table"));
 			conf.setStagingTable(rs.getString("staging_table"));
 			conf.setWarehouseDBName(rs.getString("warehouse_db_name"));

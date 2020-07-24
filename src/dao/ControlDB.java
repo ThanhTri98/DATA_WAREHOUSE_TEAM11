@@ -22,13 +22,14 @@ public class ControlDB {
 	static ResultSet rs = null;
 	static String sql;
 
-	public static Configuration getConfig() {
+	public static Configuration getConfig(int id_config) {
 		Configuration conf = null;
 		try {
 			conf = new Configuration();
-			sql = "SELECT * FROM CONFIGURATION";
+			sql = "SELECT * FROM CONFIGURATION WHERE CONFIG_ID=?";
 			connection = ConnectionDB.createConnection(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS);
 			pst = connection.prepareStatement(sql);
+			pst.setInt(1, id_config);
 			rs = pst.executeQuery();
 			conf = conf.getConfiguration(rs);
 			return conf;
