@@ -50,7 +50,6 @@ public class DataProcess {
 		return values;
 	}
 
-	public String readValuesTXT(File s_file, int count_field) {
 	public String readValuesTXT(File s_file, String column_list) {
 		if (!s_file.exists()) {
 			return null;
