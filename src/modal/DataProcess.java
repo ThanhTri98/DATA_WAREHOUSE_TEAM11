@@ -250,6 +250,75 @@ public class DataProcess {
 	}
 
 	public int transferData(ResultSet data_staging, int id_log, String column_list, String process_function) {
-	return 0;
+		CallableStatement cst = null; // doc proceduce
+		Connection connection = null;
+		int result = 0; // Số dòng insert thành công
+		// [ma_dk,mssv,ma_lh,ngay_dk]
+		String[] col_arr = column_list.split(",");
+		int count_col = col_arr.length;
+		// P_INSERT_DANGKY
+		String func_name = process_function.substring(0, process_function.indexOf("("));
+		// S,S,S,D,I *S: String, D: Date, I: int
+		String param = process_function.substring(process_function.indexOf("(") + 1, process_function.indexOf(")"));
+		// P_INSERT_DANGKY(S,S,S,D,I)-->> P_INSERT_DANGKY(?,?,?,?,?)
+		String sql = "{CALL " + func_name + "(" + param.replaceAll("[SID]", "?") + ")" + "}";
+//		System.out.println(sql);
+		// [S,S,S,D,I]
+		String[] param_arr = param.split(",");
+		try {
+			String regex_date_1 = "^\\d{4}[\\/\\-](0?[1-9]|1[012])[\\/\\-](0?[1-9]|[12][0-9]|3[01])+$";
+			String regex_date_2 = "^(0?[1-9]|[12][0-9]|3[01])+[\\/\\-](0?[1-9]|1[012])[\\/\\-]\\d{4}$";
+			connection = ConnectionDB.createConnection(DataWarehouse.W_DB_NAME, DataWarehouse.W_USER,
+					DataWarehouse.W_PASS);
+			loop: while (data_staging.next()) {
+				cst = connection.prepareCall(sql);
+				for (int i = 0; i < count_col; i++) { // count_col tổng field của 1 file (column_list)
+					if (param_arr[i].equals("S") || param_arr[i].equals("D")) { // Nếu là String hoặc Date
+						String value = data_staging.getString(col_arr[i]); // Lấy ra data field thứ i trong mảng
+																			// column_list (col_arr)
+						if (param_arr[i].equals("D")) { // Nếu là dạng Date
+							// Nếu thuộc 1 trong 2 định dạng dd-MM-yyyy or yyyy-MM-dd
+							if (Pattern.matches(regex_date_1, value) || Pattern.matches(regex_date_2, value)) {
+								// Nếu định dạng ngày là dd-MM-yyyy thì chuyển về yyyy-MM-dd (sql chỉ nhận
+								// yyyy-MM-dd)
+								if (Pattern.matches(regex_date_2, value)) {
+									value = convertDate(value);
+								}
+							} else { // Ngược lại không đúng 1 trong 2 định dạng ngày trên thì lỗi ngày chưa đúng
+										// định dạng
+								continue loop; // Tiếp tục đọc hàng tiếp theo trong ResultSet
+							}
+						}
+						cst.setString((i + 1), value);// Set value cho param thứ i+1 (i+1 vì index của param bắt đầu từ
+														// 1)
+					} else {
+						try {
+							int value = Integer.parseInt(data_staging.getString(col_arr[i])); // Nếu field đó kiểu dữ liệu là int
+							cst.setInt((i + 1), value);
+						}catch (NumberFormatException e) {
+							continue loop;
+						}
+					}
+				}
+				cst.setInt(param_arr.length - 1, id_log);// Cái này set cho param id_log
+				cst.registerOutParameter(param_arr.length, java.sql.Types.VARCHAR);
+				if (cst.executeUpdate() > 0) {
+					result++; // Nếu rowAffect > 0 thì tăng số dòng insert thành công lên 1
+				} 
+			}
+			return result;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return -1;
+		} finally {
+			try {
+				if (connection != null)
+					connection.close();
+				if (cst != null)
+					cst.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
 	}
 }
