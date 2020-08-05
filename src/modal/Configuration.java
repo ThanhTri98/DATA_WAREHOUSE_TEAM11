@@ -9,6 +9,7 @@ public class Configuration {
 	private String SuccessDir;
 	private String errorDir;
 	private String colmnList;
+	private String processFunction;
 	private String warehouseDBName;
 	private String warehouseUser;
 	private String warehousePass;
@@ -17,6 +18,14 @@ public class Configuration {
 	private String stagingUser;
 	private String stagingPass;
 	private String stagingTable;
+
+	public String getProcessFunction() {
+		return processFunction;
+	}
+
+	public void setProcessFunction(String processFunction) {
+		this.processFunction = processFunction;
+	}
 
 	public int getIdConfig() {
 		return idConfig;
@@ -124,24 +133,22 @@ public class Configuration {
 	}
 
 	public Configuration getConfiguration(ResultSet rs) {
-		Configuration conf = null;
 		try {
-			rs.next();
-			conf = new Configuration();
-			conf.setIdConfig(rs.getInt("config_id"));
-			conf.setImportDir(rs.getString("import_dir"));
-			conf.setSuccessDir(rs.getString("success_dir"));
-			conf.setErrorDir(rs.getString("error_dir"));
-			conf.setColmnList(rs.getString("column_list"));
-			conf.setWarehouseTable(rs.getString("warehouse_table"));
-			conf.setStagingTable(rs.getString("staging_table"));
-			conf.setWarehouseDBName(rs.getString("warehouse_db_name"));
-			conf.setWarehouseUser(rs.getString("warehouse_user"));
-			conf.setWarehousePass(rs.getString("warehouse_pass"));
-			conf.setStagingDBName(rs.getString("staging_db_name"));
-			conf.setStagingUser(rs.getString("staging_user"));
-			conf.setStagingPass(rs.getString("staging_pass"));
-			return conf;
+			this.setIdConfig(rs.getInt("config_id"));
+			this.setImportDir(rs.getString("import_dir"));
+			this.setSuccessDir(rs.getString("success_dir"));
+			this.setErrorDir(rs.getString("error_dir"));
+			this.setColmnList(rs.getString("column_list"));
+			this.setProcessFunction(rs.getString("process_function"));;
+			this.setWarehouseTable(rs.getString("warehouse_table"));
+			this.setStagingTable(rs.getString("staging_table"));
+			this.setWarehouseDBName(rs.getString("warehouse_db_name"));
+			this.setWarehouseUser(rs.getString("warehouse_user"));
+			this.setWarehousePass(rs.getString("warehouse_pass"));
+			this.setStagingDBName(rs.getString("staging_db_name"));
+			this.setStagingUser(rs.getString("staging_user"));
+			this.setStagingPass(rs.getString("staging_pass"));
+			return this;
 		} catch (SQLException e) {
 			e.printStackTrace();
 			return null;

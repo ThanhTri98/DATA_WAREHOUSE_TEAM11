@@ -8,10 +8,11 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.sql.CallableStatement;
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.text.SimpleDateFormat;
-import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.StringTokenizer;
 import java.util.regex.Pattern;
@@ -23,29 +24,34 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-import dao.ControlDB;
+import util.ConnectionDB;
 
 public class DataProcess {
-	public static final String NUMBER_REGEX = "^[0-9]+$";
-	public static final String DATE_FORMAT = "yyyy-MM-dd";
+	/*
+	 * static được sử dụng để quản lý bộ nhớ tốt hơn và nó có thể được truy cập trực
+	 * // tiếp thông qua lớp mà không cần khởi tạo.
+	 */
+
 	public static final String DELIM_COUNT_LINES = "$&$";
-	private boolean dropFirstField = true;
+	private boolean dropFirstField = false;
 
 	private String readLines(String value, String delim) {
-		String values = "";
+		// Fix lỗi lỗi cú pháp sql
+		// VD:Before: value = ABC|465|XX(YY)| -> After = ("ABC","456","XX(YY)") !!Error
+		// Replace: -> ("ABC","456","XX'YY'") OK
+		value = value.replaceAll("[()]", "'");
+		String values = "(";
 		StringTokenizer stoken = new StringTokenizer(value, delim);
 		if (this.dropFirstField) {
 			stoken.nextToken(); // Bỏ Field STT trong file
-			this.dropFirstField = true;
 		}
+		// Tổng số field trong đoạn value dựa vào delim
 		int countToken = stoken.countTokens();
-		String lines = "(";
 		String token = "";
-		for (int j = 0; j < countToken; j++) {
+		for (int i = 0; i < countToken; i++) {
 			token = stoken.nextToken();
-			lines += (j == countToken - 1) ? '"' + token.trim() + '"' + ")," : '"' + token.trim() + '"' + ",";
-			values += lines;
-			lines = "";
+			// Nếu là field cuối cùng thì cộng thêm dấu )
+			values += (i == countToken - 1) ? '"' + token.trim() + '"' + ")," : '"' + token.trim() + '"' + ",";
 		}
 		return values;
 	}
@@ -55,7 +61,7 @@ public class DataProcess {
 			return null;
 		}
 		int count_field = new StringTokenizer(column_list, ",").countTokens();
-		int countLines=0;
+		int countLines = 0;
 		String values = "";
 		String delim = "|"; // hoặc \t
 		try {
@@ -76,7 +82,7 @@ public class DataProcess {
 			}
 			// STT|Mã sinh viên|Họ lót|Tên|...-> line.split(delim)[0]="STT" không phải số
 			// nên là header -> bỏ qua line
-			if (Pattern.matches(NUMBER_REGEX, line.split(delim)[0])) { // Kiem tra xem co phan header khong
+			if (Pattern.matches("^[0-9]+$", line.split(delim)[0])) { // Kiem tra xem co phan header khong
 				values += readLines(line, delim);
 				countLines++;
 			}
@@ -91,267 +97,159 @@ public class DataProcess {
 				countLines++;
 			}
 			bReader.close();
-			return countLines+DELIM_COUNT_LINES+values.substring(0, values.length() - 1);
+			return countLines + DELIM_COUNT_LINES + values.substring(0, values.length() - 1);
 
 		} catch (NoSuchElementException | IOException e) {
 			e.printStackTrace();
 			return null;
 		}
 	}
-/*
-	public static void main(String[] args) {
-		DataProcess d = new DataProcess();
-		// mssv,ho,ten,ngay_sinh,ma_lop,ten_lop,sdt,email,que_quan,ghi_chu
-		// stt,ma_mh,ten_mh,tin_chi,khoa_bm_ql,khoa_bm_sd
-		// ma_dk,mssv,ma_lh,ngay_dk
-		// ma_lh,ma_mh,nam_hoc
-		String values  =d.readValuesXLSX(new File("C:\\WAREHOUSE\\IMPORT_DIR\\STUDENT\\sinhvien_sang_nhom11.xlsx"),
-				"mssv,ho,ten,ngay_sinh,ma_lop,ten_lop,sdt,email,que_quan,ghi_chu");
-		int index = values.indexOf(DELIM_COUNT_LINES);
-		int countLines = Integer.parseInt(values.substring(0, index));
-		values = values.replace(countLines+DELIM_COUNT_LINES, "..");
-		System.out.println(countLines + DELIM_COUNT_LINES);
-		System.out.println(values);
-	}
-*/
+
 	public String readValuesXLSX(File s_file, String column_list) {
-		if(!s_file.exists()) {
-			SendMail.writeLogsToLocalFile("  --> File is not exists: "+s_file.getName());
+		if (!s_file.exists() || !s_file.isFile()) { // OUT nếu s_file không tồn tại hoặc là folder
+			SendMail.writeLogsToLocalFile(" --> FILE NOT FOUND!!!: " + s_file.getName());
 			return null;
 		}
 		String values = "";
 		String value = "";
 		String delim_xlsx = "|";
-		int count_str_empty = 0;
-		int countCell = new StringTokenizer(column_list, ",").countTokens();
-		int countLines=0;
-		StringTokenizer countSubStr;
+		// Tổng số field trong column_list + 1 ( +1 cho cột STT)
+		int totalCells = new StringTokenizer(column_list, ",").countTokens() + 1;
+		int totalRows = 0;
+		int countLines = 0;
+		int firstRow = 1;
+		FileInputStream fileIn = null;
+		XSSFWorkbook workBooks = null;
 		try {
-			FileInputStream fileIn = new FileInputStream(s_file);
-			XSSFWorkbook workBooks = new XSSFWorkbook(fileIn);
+			fileIn = new FileInputStream(s_file);
+			workBooks = new XSSFWorkbook(fileIn);
 			XSSFSheet sheet = workBooks.getSheetAt(0);
-			Iterator<Row> rows = sheet.iterator();
-			Row rowCheck = rows.next();
+			totalRows = sheet.getLastRowNum();
+			Row rowCheck = sheet.getRow(0); // Lấy ra hàng đầu tiên
 			// Kiem tra xem file co dung format hay chua dua vao so cell trong file
-			if (rowCheck.getLastCellNum() < countCell || rowCheck.getLastCellNum() > countCell + 1) {
-				System.out.println(rowCheck.getLastCellNum());
-				SendMail.writeLogsToLocalFile("  --> File is not format: "+s_file.getName());
+			if (rowCheck.getLastCellNum() < totalCells - 1 || rowCheck.getLastCellNum() > totalCells) {
+				SendMail.writeLogsToLocalFile(" -> FILE NOT FORMATED!!!: " + s_file.getName());
 				workBooks.close();
 				return null;
 			}
-			if (rowCheck.cellIterator().next().getCellType().equals(CellType.NUMERIC)) { // Kiem tra xem co phan
-																							// header khong
-				rows = sheet.iterator();// vi goi rows.next thi cur index =1, neu khong co header thi set lại cur index
-										// =0
+			// Kiểm tra xem row đầu tiên có phải là header không?
+			if (rowCheck.cellIterator().next().getCellType().equals(CellType.NUMERIC)) {
+				firstRow = 0; // default = 1, nếu không phải là header thì row bắt đầu lại từ 0
 			}
-			while (rows.hasNext()) {
-				Row row = rows.next();
-				Iterator<Cell> cells = row.cellIterator();
-				while (cells.hasNext()) {
-					Cell cell = cells.next();
-					CellType cellType = cell.getCellType();
-					switch (cellType) {
-					case NUMERIC:
-						if (DateUtil.isCellDateFormatted(cell)) {
-							SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_FORMAT);
-							value += dateFormat.format(cell.getDateCellValue()) + delim_xlsx;
-						} else {
-							value += (long) cell.getNumericCellValue() + delim_xlsx;
-						}
-						break;
-					case STRING:
-						value += cell.getStringCellValue() + delim_xlsx;
-						break;
-					case FORMULA:
-						switch (cell.getCachedFormulaResultType()) {
-						case NUMERIC:
-							value += (long) cell.getNumericCellValue() + delim_xlsx;
-							break;
-						case STRING:
-							value += cell.getStringCellValue() + delim_xlsx;
-							break;
-						case BLANK:
-						default:
+			for (int rw = firstRow; rw < totalRows; rw++) {
+				Row row = sheet.getRow(rw); // Lấy ra row 'rw'
+				if (row != null) {
+					int count_empty = 0;
+					for (int ce = 1; ce < totalCells; ce++) {
+						Cell cell = row.getCell(ce); // Lấy ra cell 'ce' trong row 'rw'
+						if (cell != null) {
+							switch (cell.getCellType()) {
+							case NUMERIC: // dạng số
+								if (DateUtil.isCellDateFormatted(cell)) { // Nếu thuộc định dạng ngày
+									SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+									value += dateFormat.format(cell.getDateCellValue()) + delim_xlsx;
+								} else {
+									value += (long) cell.getNumericCellValue() + delim_xlsx;
+								}
+								break;
+							case STRING: // Dạng chuỗi
+								value += cell.getStringCellValue() + delim_xlsx;
+								break;
+							case FORMULA: // Ô công thức
+								switch (cell.getCachedFormulaResultType()) {
+								case STRING:
+									value += cell.getStringCellValue() + delim_xlsx;
+									break;
+								default:
+									value += "str_empty" + delim_xlsx;
+									count_empty++;
+									break;
+								}
+								break;
+							case BLANK:
+							default:
+								value += "str_empty" + delim_xlsx;
+								count_empty++;
+								break;
+							}
+						} else { // Cell này bị null (Blank)
 							value += "str_empty" + delim_xlsx;
-							break;
+							count_empty++;
 						}
-						break;
-					case BLANK:
-					default:
-						count_str_empty++;
-						value += "str_empty" + delim_xlsx;
-						break;
 					}
+					if (count_empty != totalCells - 1) {
+						values += readLines(value, delim_xlsx);
+						countLines++;
+					}
+					value = "";
 				}
-				if (row.getLastCellNum() == countCell) {
-					value += "str_empty" + delim_xlsx;
-				}
-				countSubStr = new StringTokenizer(value, delim_xlsx);
-				if (count_str_empty != countCell + 1 && countSubStr.countTokens()==countCell+1) {
-					values += readLines(value, delim_xlsx);
-					countLines++;
-				}
-				value = "";
-				count_str_empty = 0;
 			}
-			workBooks.close();
-			fileIn.close();
-			return countLines+DELIM_COUNT_LINES+values.substring(0, values.length() - 1);
+			return countLines + DELIM_COUNT_LINES + values.substring(0, values.length() - 1);
 		} catch (IOException e) {
 			return null;
+		} finally {
+			try {
+				if (workBooks != null)
+					workBooks.close();
+				if (fileIn != null)
+					fileIn.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 		}
 	}
 
-	public boolean moveFile(File file, String target_dir) {
+	public void moveFile(File file, String target_dir) {
+		BufferedInputStream bReader = null;
+		BufferedOutputStream bWriter = null;
 		try {
-			BufferedInputStream bReader = new BufferedInputStream(new FileInputStream(file));
-			BufferedOutputStream bWriter = new BufferedOutputStream(
-					new FileOutputStream(target_dir + File.separator + file.getName()));
+			bReader = new BufferedInputStream(new FileInputStream(file));
+			bWriter = new BufferedOutputStream(new FileOutputStream(target_dir + File.separator + file.getName()));
 			byte[] buff = new byte[1024 * 10];
 			int data = 0;
 			while ((data = bReader.read(buff)) != -1) {
 				bWriter.write(buff, 0, data);
 			}
-			bReader.close();
-			bWriter.close();
-			return true;
 		} catch (IOException e) {
 			e.printStackTrace();
-			return false;
 		} finally {
+			try {
+				if (bReader != null)
+					bReader.close();
+				if (bWriter != null)
+					bWriter.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 			file.delete();
 		}
 	}
 
-	/*
-	public int countLines(File file, String extention) {
-		int result = 0;
-		XSSFWorkbook workBooks = null;
-		try {
-			if (extention.indexOf(".txt") != -1) {
-				BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(file), "utf8"));
-				String line;
-				while ((line = bReader.readLine()) != null) {
-					if (!line.trim().isEmpty()) {
-						result++;
-					}
-				}
-				bReader.close();
-			} else if (extention.indexOf(".xlsx") != -1) {
-				workBooks = new XSSFWorkbook(file);
-				XSSFSheet sheet = workBooks.getSheetAt(0);
-				Iterator<Row> rows = sheet.iterator();
-				rows.next();
-				while (rows.hasNext()) {
-					rows.next();
-					result++;
-				}
-			}
-			return result;
-		} catch (IOException | org.apache.poi.openxml4j.exceptions.InvalidFormatException e) {
-			e.printStackTrace();
-			return 0;
-		} finally {
-			if (workBooks != null) {
-				try {
-					workBooks.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-		}
-	}
-*/
-	private String convertDate(String date) {
+	private String convertDate(String date) { // dd-/MM-/yyyy >>> yyyy-MM-dd
 		String result = "";
 		String delim = "/";
 		if (date.indexOf("-") != -1) {
 			delim = "-";
 		}
 		String[] dateArr = date.split(delim);
-//		if (dateArr[0].length() == 4 && delim == "/") { // 2525/05/05 ?? 2525/5/5
-//			// 5/-5/-2525 -> 05/05/2525
-//			for (int i = 1; i < dateArr.length; i++) {
-//				if (dateArr[i].length() == 1) {
-//					dateArr[i] = "0" + dateArr[i];
-//				}
-//			}
-//			result = dateArr[0] + "/" + dateArr[1] + "/" + dateArr[2];
-//		} else if (dateArr[0].length() == 4 && delim == "-") { // 2525-05-05 -> 2525/05/05
-//			for (int i = 1; i < dateArr.length; i++) {
-//				if (dateArr[i].length() == 1) {
-//					dateArr[i] = "0" + dateArr[i];
-//				}
-//			}
-//			result = dateArr[0] + "/" + dateArr[1] + "/" + dateArr[2];
-//		}
-		// 5/-5/-2525 -> 05/05/2525
+		// 5/-5/-2525 -> 05-05-2525
 		for (int i = 0; i < dateArr.length - 1; i++) {
 			if (dateArr[i].length() == 1) {
 				dateArr[i] = "0" + dateArr[i];
 			}
 		}
-		result = dateArr[2] + "/" + dateArr[1] + "/" + dateArr[0];
+		result = dateArr[2] + "-" + dateArr[1] + "-" + dateArr[0];
 
 		return result;
 	}
-	public int transformData(ResultSet data_staging, int id_log) {
-		// Nếu trùng mssv thì insert dòng mới và update time_expire là NOW()
-		//
-		String regex_date_1 = "^\\d{4}[\\/\\-](0?[1-9]|1[012])[\\/\\-](0?[1-9]|[12][0-9]|3[01])+$";
-		String regex_date_2 = "^(0?[1-9]|[12][0-9]|3[01])+[\\/\\-](0?[1-9]|1[012])[\\/\\-]\\d{4}$";
-		int count = 0;
-		Student stu = new Student();
-		try {
-			while (data_staging.next()) {
-				String ngay_sinh = data_staging.getString("ngay_sinh");
-				// Kiểm tra định dạng ngày sinh yyyy/-MM/-dd or dd/-MM/-yyyy -> Đưa về định dạng
-				// yyyy/MM/dd
-				// Nếu khác thì bỏ qua bảng ghi này.
-				if (!Pattern.matches(regex_date_1, ngay_sinh) && !Pattern.matches(regex_date_2, ngay_sinh)) {
-					continue;
-				}
-				// Nếu là định dạng dd/-MM/-yyyy or yyyy-MM-dd thì chuyển thành yyyy/MM/dd
-				ngay_sinh = convertDate(ngay_sinh);
-				String mssv = data_staging.getString("mssv");
-				String ho = data_staging.getString("ho");
-				String ten = data_staging.getString("ten");
-				String ma_lop = data_staging.getString("ma_lop");
-				String ten_lop = data_staging.getString("ten_lop");
-				String sdt = data_staging.getString("sdt");
-				String email = data_staging.getString("email");
-				String que_quan = data_staging.getString("que_quan");
-				String ghi_chu = data_staging.getString("ghi_chu");
 
-				// check in DBWareHouse, If value duplicate
-//				if (ControlDB.selectOneField(DataWarehouse.W_DB_NAME, DataWarehouse.W_USER, DataWarehouse.W_PASS,
-//						"student", "mssv", "mssv", mssv) != null) {
-//					System.out.println("Duplicate mssv");
-//					continue;
-//				}
-				stu.setMssv(mssv);
-				stu.setHo(ho);
-				stu.setTen(ten);
-				stu.setNgaySinh(ngay_sinh);
-				stu.setMaLop(ma_lop);
-				stu.setTenLop(ten_lop);
-				stu.setSdt(sdt);
-				stu.setEmail(email);
-				stu.setQueQuan(que_quan);
-				stu.setGhiChu(ghi_chu.length() == 0 ? "str_empty" : ghi_chu);
-				String columnList = DataWarehouse.COLUMN_LIST + "," + "id_log" + "," + "time_expire";
-				// check insert data to DBStaging from DBWareHouse
-				if (ControlDB.insertValuesDBStagingToDBWareHouse(DataWarehouse.W_DB_NAME, DataWarehouse.W_USER,
-						DataWarehouse.W_PASS, "SINHVIEN", columnList, stu, id_log)) {
-					count++;
-				}
-			}
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-		ControlDB.truncateTable(DataWarehouse.STAGING_DB_NAME, DataWarehouse.STAGING_USER, DataWarehouse.STAGING_PASS,
-				DataWarehouse.STAGING_TABLE);
+	public static void main(String[] args) {
+		System.out.println(new DataProcess().readValuesXLSX(
+				new File("C:\\WAREHOUSE\\SUCCESS_DIR\\STUDENT\\sinhvien_chieu_nhom3.xlsx"),
+				"mssv,ho,ten,ngay_sinh,ma_lop,ten_lop,sdt,email,que_quan,ghi_chu"));
+	}
 
-		return count;
+	public int transferData(ResultSet data_staging, int id_log, String column_list, String process_function) {
+	return 0;
 	}
 }
