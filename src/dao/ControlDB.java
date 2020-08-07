@@ -97,13 +97,13 @@ public class ControlDB {
 		}
 	}
 
-	public boolean insertValues(String db_name, String user_name, String password, String table_name,
-			String column_list, String values) throws SQLException {
+	public void insertValues(String db_name, String user_name, String password, String table_name, String column_list,
+			String values) throws SQLException {
 
 		sql = "INSERT INTO " + table_name + "(" + column_list + ") VALUES " + values;
 		connection = ConnectionDB.createConnection(db_name, user_name, password);
 		pst = connection.prepareStatement(sql);
-		int result = pst.executeUpdate();
+		pst.executeUpdate();
 		try {
 			if (connection != null)
 				connection.close();
@@ -112,8 +112,6 @@ public class ControlDB {
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
-		return result > 0;
-
 	}
 
 	public ResultSet selectOneField(String db_name, String user_name, String password, String table_name, String field,
@@ -139,16 +137,14 @@ public class ControlDB {
 		}
 	}
 
-	public boolean truncateTable(String db_name, String user, String pass, String table_name) {
+	public void truncateTable(String db_name, String user, String pass, String table_name) throws SQLException {
 		try {
 			sql = "TRUNCATE " + table_name;
 			connection = ConnectionDB.createConnection(db_name, user, pass);
 			pst = connection.prepareStatement(sql);
-			int result = pst.executeUpdate();
-			return result > 0;
+			pst.executeUpdate();
 		} catch (SQLException e1) {
 			e1.printStackTrace();
-			return false;
 		} finally {
 			try {
 				if (pst != null)
@@ -192,6 +188,7 @@ public class ControlDB {
 			}
 		}
 	}
+
 	public String getCONTROL_DB_NAME() {
 		return CONTROL_DB_NAME;
 	}

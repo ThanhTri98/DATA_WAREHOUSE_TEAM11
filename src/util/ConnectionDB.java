@@ -18,8 +18,8 @@ public class ConnectionDB {
 			return con;
 
 		} catch (SQLException | ClassNotFoundException e) {
+			SendMail.writeLogsToLocalFile(" -> CONNECTION ERRORS "+e.getMessage());
 			e.printStackTrace();
-			SendMail.writeLogsToLocalFile("  !!!ERROR CONNECTED TO DATABASE");
 			return null;
 		}
 	}

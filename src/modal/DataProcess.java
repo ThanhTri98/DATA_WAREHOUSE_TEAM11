@@ -60,7 +60,7 @@ public class DataProcess {
 		if (!s_file.exists()) {
 			return null;
 		}
-		int count_field = new StringTokenizer(column_list, ",").countTokens();
+		int count_field = new StringTokenizer(column_list, ",").countTokens()+1;
 		int countLines = 0;
 		String values = "";
 		String delim = "|"; // hoặc \t
@@ -71,15 +71,12 @@ public class DataProcess {
 				delim = "\t";
 			}
 			// Kiểm tra xem tổng số field trong file có đúng format
-			if (!column_list.split(",")[0].equalsIgnoreCase(("STT"))) {
-				count_field++;
-			} else {
-				this.dropFirstField = false;
-			}
 			if (new StringTokenizer(line, delim).countTokens() != count_field) {
 				bReader.close();
 				return null;
 			}
+			// Bỏ field STT
+			this.dropFirstField = true;
 			// STT|Mã sinh viên|Họ lót|Tên|...-> line.split(delim)[0]="STT" không phải số
 			// nên là header -> bỏ qua line
 			if (Pattern.matches("^[0-9]+$", line.split(delim)[0])) { // Kiem tra xem co phan header khong
@@ -102,6 +99,8 @@ public class DataProcess {
 		} catch (NoSuchElementException | IOException e) {
 			e.printStackTrace();
 			return null;
+		}finally {
+			dropFirstField = false;
 		}
 	}
 
@@ -126,6 +125,10 @@ public class DataProcess {
 			XSSFSheet sheet = workBooks.getSheetAt(0);
 			totalRows = sheet.getLastRowNum();
 			Row rowCheck = sheet.getRow(0); // Lấy ra hàng đầu tiên
+			if(rowCheck==null) {
+				SendMail.writeLogsToLocalFile(" -> FILE NOT FORMATED!!!: " + s_file.getName());
+				return null;
+			}
 			// Kiem tra xem file co dung format hay chua dua vao so cell trong file
 			if (rowCheck.getLastCellNum() < totalCells - 1 || rowCheck.getLastCellNum() > totalCells) {
 				SendMail.writeLogsToLocalFile(" -> FILE NOT FORMATED!!!: " + s_file.getName());
@@ -244,15 +247,22 @@ public class DataProcess {
 	}
 
 	public static void main(String[] args) {
-		System.out.println(new DataProcess().readValuesXLSX(
-				new File("C:\\WAREHOUSE\\SUCCESS_DIR\\STUDENT\\sinhvien_chieu_nhom3.xlsx"),
-				"mssv,ho,ten,ngay_sinh,ma_lop,ten_lop,sdt,email,que_quan,ghi_chu"));
+		System.out.println(new DataProcess().readValuesTXT(
+				new File("C:\\Users\\VõThanh\\Desktop\\COURSES\\WAREHOUSE\\DIR\\SUBJECT_REGIS\\dangky_sang_nhom11_2020.txt"),
+				"ma_dk,mssv,ma_lh,ngay_dk"));
 	}
 
 	public int transferData(ResultSet data_staging, int id_log, String column_list, String process_function) {
+		SendMail.writeLogsToLocalFile("#	#	#	#	#	#	#	#");
+		SendMail.setAUTO_FLUSH(false);
+		// TRUNCATE TABLE STAGING***
 		CallableStatement cst = null; // doc proceduce
 		Connection connection = null;
 		int result = 0; // Số dòng insert thành công
+		int totalLine = 0; // Tổng số dòng
+		int errorLine = 0; // Số dòng lỗi
+		int fk_notExists = 0;
+		int duplicateLine = 0;
 		// [ma_dk,mssv,ma_lh,ngay_dk]
 		String[] col_arr = column_list.split(",");
 		int count_col = col_arr.length;
@@ -271,6 +281,8 @@ public class DataProcess {
 			connection = ConnectionDB.createConnection(DataWarehouse.W_DB_NAME, DataWarehouse.W_USER,
 					DataWarehouse.W_PASS);
 			loop: while (data_staging.next()) {
+				totalLine++; // Tổng số hàng trong ResultSet được lưu vào biến này
+				String dupli = ""; // Lưu số dòng bị trùng
 				cst = connection.prepareCall(sql);
 				for (int i = 0; i < count_col; i++) { // count_col tổng field của 1 file (column_list)
 					if (param_arr[i].equals("S") || param_arr[i].equals("D")) { // Nếu là String hoặc Date
@@ -286,15 +298,20 @@ public class DataProcess {
 								}
 							} else { // Ngược lại không đúng 1 trong 2 định dạng ngày trên thì lỗi ngày chưa đúng
 										// định dạng
+								SendMail.writeLogsToLocalFile(" -> LINE ~ " + data_staging.getInt(1) + ": " + value
+										+ " STATUS: DATE NOT FORMATED");
+								errorLine++; // Tăng số dòng lỗi lên 1
 								continue loop; // Tiếp tục đọc hàng tiếp theo trong ResultSet
 							}
 						}
 						cst.setString((i + 1), value);// Set value cho param thứ i+1 (i+1 vì index của param bắt đầu từ
 														// 1)
+						dupli += value + " ";
 					} else {
 						try {
 							int value = Integer.parseInt(data_staging.getString(col_arr[i])); // Nếu field đó kiểu dữ liệu là int
 							cst.setInt((i + 1), value);
+							dupli += value + " ";
 						}catch (NumberFormatException e) {
 							continue loop;
 						}
@@ -304,9 +321,44 @@ public class DataProcess {
 				cst.registerOutParameter(param_arr.length, java.sql.Types.VARCHAR);
 				if (cst.executeUpdate() > 0) {
 					result++; // Nếu rowAffect > 0 thì tăng số dòng insert thành công lên 1
-				} 
+				} else {
+					String OUTPUT = cst.getString(param_arr.length);
+					if (OUTPUT.equalsIgnoreCase("DUPLICATE DATA")) {
+						duplicateLine++;
+						SendMail.writeLogsToLocalFile(" -> " + dupli + " STATUS: "+ OUTPUT);
+					} else {// Khóa không tồn tại
+						fk_notExists++;
+						SendMail.writeLogsToLocalFile(" -> " + OUTPUT);
+					}
+
+				}
 			}
-			return result;
+			if (result > 0) {
+				SendMail.flushData(); // Nếu số dòng insert thành công thì flush data xuống file
+				return result;
+			} else {// Ngược lại có nghĩa là result = 0
+					// Không flush
+				if(duplicateLine==totalLine) {
+					SendMail.setBffWriter(null);
+					SendMail.setfWriter(null);
+					SendMail.setAUTO_FLUSH(true);
+					return 0; // File duplicate
+				}else if(fk_notExists==totalLine) {
+					SendMail.setBffWriter(null);
+					SendMail.setfWriter(null);
+					SendMail.setAUTO_FLUSH(true);
+					return -1; // FK NOT EXISTS (Tất cả các dòng dữ liệu có khóa ngoại không tồn tại trong bảng dim)
+				}else if(errorLine==totalLine) {
+					SendMail.setBffWriter(null);
+					SendMail.setfWriter(null);
+					SendMail.setAUTO_FLUSH(true);
+					return -2; // Error_tran ( Tất cả các dòng dữ liệu có trường không đúng định dạng vd: date 2012/1999)
+				}else {
+					// FILE NHIEU LOI QUA
+					SendMail.setAUTO_FLUSH(true);
+					return -3;
+				}
+			}
 		} catch (SQLException e) {
 			e.printStackTrace();
 			return -1;
