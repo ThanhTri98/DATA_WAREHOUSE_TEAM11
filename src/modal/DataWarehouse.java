@@ -13,9 +13,10 @@ public class DataWarehouse {
 	private String CONTROL_DB_USER;
 	private String CONTROL_DB_PASS;
 	// CONFIG
-	static int CONFIG_ID;
-	static String IMPORT_DIR, SU_DIR, ERR_DIR, COLUMN_LIST, PROCESS_FUNCTION, W_DB_NAME, W_USER, W_PASS, W_TABLE,
-			STAGING_DB_NAME, STAGING_USER, STAGING_PASS, STAGING_TABLE;
+	private int CONFIG_ID;
+	public static String W_DB_NAME, W_TABLE, W_USER, W_PASS;
+	private String IMPORT_DIR, SU_DIR, ERR_DIR, COLUMN_LIST, PROCESS_FUNCTION, STAGING_DB_NAME, STAGING_USER,
+			STAGING_PASS, STAGING_TABLE;
 	// LOG
 	final static String COLUMN_LIST_LOG = "FILE_NAME,CONFIG_ID,FILE_STATUS,STAGING_LOAD_COUNT,WAREHOUSE_LOAD_COUNT,FILE_TIMESTAMP";
 	//
@@ -49,11 +50,14 @@ public class DataWarehouse {
 
 	public static void main(String[] args) {
 		try {
-			DataWarehouse d_warehouse = new DataWarehouse(Integer.parseInt(args[0]));
+			DataWarehouse d_warehouse = new DataWarehouse(4);
 			d_warehouse.downloadFile();
 			d_warehouse.ExtractToDB();
-//			SendMail.sendMail();
-		}catch (NumberFormatException e) {
+			if (d_warehouse.CONFIG_ID == 4) {
+				SendMail.sendMail();
+				SendMail.writeLogsToLocalFile("SEND MAIL SUCCESS");
+			}
+		} catch (NumberFormatException e) {
 			System.out.println("Vui long nhap id_config");
 		}
 	}
@@ -150,10 +154,8 @@ public class DataWarehouse {
 		SendMail.writeLogsToLocalFile("EXTRACT TO DATABASE - " + SendMail.CURRENT_TIME);
 		System.out.println("Extract Staging...");
 		// 2.0 Lấy ra tất cả các trường có file_status=ER và lưu vào ResultSet
-		ResultSet allRecordLogs = control_db.selectAllField(
-				CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS,
-				"LOGS","FILE_STATUS,CONFIG_ID", "ER," + CONFIG_ID,
-				"false,true");
+		ResultSet allRecordLogs = control_db.selectAllField(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, "LOGS",
+				"FILE_STATUS,CONFIG_ID", "ER," + CONFIG_ID, "false,true");
 		try {
 			File file = null;
 			String file_name = null;
@@ -167,8 +169,7 @@ public class DataWarehouse {
 				// 2.2 Mở đối tượng file nằm trong thư mục IMPORT_DIR dựa vào file_name
 				file = new File(IMPORT_DIR + File.separator + file_name);
 				if (!file.exists()) {
-					SendMail.writeLogsToLocalFile(" -> " + file.getAbsolutePath()
-					+ " STATUS: " + "FILE NOT EXISTS");
+					SendMail.writeLogsToLocalFile(" -> " + file.getAbsolutePath() + " STATUS: " + "FILE NOT EXISTS");
 					continue;
 				}
 				// 2.3 Tiến hành đọc file và chuyển nội dung trong file thành
@@ -176,9 +177,8 @@ public class DataWarehouse {
 				// INSERT INTO TABLE VALUES chuỗi values
 				if (file.getPath().endsWith(".xlsx")) {
 					values = d_process.readValuesXLSX(file, COLUMN_LIST);
-				} else if (file.getPath().endsWith(".txt")) {
+				} else if (file.getPath().endsWith(".txt") || file.getPath().endsWith(".csv")) {
 					values = d_process.readValuesTXT(file, COLUMN_LIST);
-				} else if (file.getPath().endsWith(".csv")) {
 				}
 				try {
 					// Tách lấy số dòng đọc lên từ file
@@ -187,56 +187,63 @@ public class DataWarehouse {
 						countLines = Integer.parseInt(values.substring(0, index));
 						values = values.replace(countLines + DataProcess.DELIM_COUNT_LINES, "");
 					}
+					// Truncate table staging trước khi đưa dữ liệu mới vào
 					control_db.truncateTable(STAGING_DB_NAME, STAGING_USER, STAGING_PASS, STAGING_TABLE);
 					// 2.4 Tiến hành insert chuỗi values xuống table student trong db_staging đồng
 					// thời transform rồi đưa qua warehouse
-					control_db.insertValues(STAGING_DB_NAME, STAGING_USER, STAGING_PASS, STAGING_TABLE, COLUMN_LIST,values);
-						// Cập nhật số dòng vừa load vào db_staging
+					control_db.insertValues(STAGING_DB_NAME, STAGING_USER, STAGING_PASS, STAGING_TABLE, COLUMN_LIST,
+							values);
+					// Cập nhật số dòng vừa load vào db_staging
+					control_db.updateLogs(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, id_log,
+							"STAGING_LOAD_COUNT", countLines + "", true);
+					System.out.println(file_name + "--> Transforming...");
+					// Lấy toàn bộ bảng ghi trong table student từ db staging
+					ResultSet data_staging = control_db.selectAllField(STAGING_DB_NAME, STAGING_USER, STAGING_PASS,
+							STAGING_TABLE, null, null, null);
+					// 2.5 Tiến hành transform dữ liệu và chuyển qua table student trong db
+					// warehouse và trả về số dòng vừa chuyển qua dw
+					int warehouse_load_count = d_process.transferData(data_staging, id_log, COLUMN_LIST,
+							PROCESS_FUNCTION);
+					// Update log when insert data success
+					// Nếu số dòng lớn hơn 0 có nghĩa là không có trường nào bị lỗi format ( trans
+					// thành công ít nhất 1 dòng)
+					if (warehouse_load_count >= 0) {
+						// Cập nhật file_status = SU
+						String status = warehouse_load_count == countLines ? "SU"
+								: warehouse_load_count == 0 ? "FILE_DUPLICATE" : "MISSING_TRAN";
+						control_db.updateLogs(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, id_log, "FILE_STATUS",
+								status, false);
+						// Cập nhật số dòng load vào table student trong dw
 						control_db.updateLogs(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, id_log,
-								"STAGING_LOAD_COUNT", countLines + "", true);
-						System.out.println(file_name + "--> Transforming...");
-						// Lấy toàn bộ bảng ghi trong table student từ db staging
-						ResultSet data_staging = control_db.selectAllField(STAGING_DB_NAME, STAGING_USER, STAGING_PASS,
-								STAGING_TABLE, null, null, null);
-						// 2.5 Tiến hành transform dữ liệu và chuyển qua table student trong db
-						// warehouse và trả về số dòng vừa chuyển qua dw
-						int warehouse_load_count = d_process.transferData(data_staging, id_log, COLUMN_LIST,
-								PROCESS_FUNCTION);
-						// Update log when insert data success
-						// Nếu số dòng lớn hơn 0 có nghĩa là không có trường nào bị lỗi format ( trans
-						// thành công ít nhất 1 dòng)
-						if (warehouse_load_count >= 0) {
-							// Cập nhật file_status = SU
-							String status = warehouse_load_count == countLines ? "SU"
-									: warehouse_load_count == 0 ? "FILE_DUPLICATE" : "MISSING_TRAN";
-							control_db.updateLogs(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, id_log,
-									"FILE_STATUS", status, false);
-							// Cập nhật số dòng load vào table student trong dw
-							control_db.updateLogs(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, id_log,
-									"WAREHOUSE_LOAD_COUNT", warehouse_load_count + "", true);
-							// xong thì tiến hành chuyển file chứa dữ liệu vừa rồi qua thư mục SUCCESS_DIR
-							d_process.moveFile(file, SU_DIR);
-							SendMail.writeLogsToLocalFile(" -> " + file_name + " STATUS: " + status);
-							SendMail.writeLogsToLocalFile("#	#	#	#	#	#	#	#");
-							if (status.equals("MISSING_TRAN")) {
-								System.out.println(file_name + " TRAN STATUS: ->  " + status + " "
-										+ (countLines - warehouse_load_count) + " LINES");
-							} else if (status.equals("SU")) {
-								System.out.println(file_name + " TRAN STATUS: ->  " + status + " "
-										+ warehouse_load_count + " LINES");
-							} else {
-								System.out.println(file_name + " TRAN STATUS: ->  " + status);
-							}
+								"WAREHOUSE_LOAD_COUNT", warehouse_load_count + "", true);
+						// xong thì tiến hành chuyển file chứa dữ liệu vừa rồi qua thư mục SUCCESS_DIR
+						d_process.moveFile(file, SU_DIR);
+						if (status.equals("MISSING_TRAN")) {
+							SendMail.writeLogsToLocalFile(" -> " + file_name + " STATUS: " + status + " "
+									+ (countLines - warehouse_load_count) + " LINES");
+							System.out.println(file_name + " TRAN STATUS: ->  " + status + " "
+									+ (countLines - warehouse_load_count) + " LINES");
+						} else if (status.equals("SU")) {
+							SendMail.writeLogsToLocalFile(
+									" -> " + file_name + " STATUS: " + status + " " + warehouse_load_count + " LINES");
+							System.out.println(
+									file_name + " TRAN STATUS: ->  " + status + " " + warehouse_load_count + " LINES");
 						} else {
-							String status = warehouse_load_count==-2?"ERR_TRAN":warehouse_load_count==-1?"FK_NOT_EXISTS":"DUPLI&FK_NOT_EXISTS";
-							control_db.updateLogs(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, id_log,
-									"FILE_STATUS", status, false);
-							// Đồng thời chuyển file vừa rồi vào thục mục ERR_DIR
-							d_process.moveFile(file, ERR_DIR);
-							SendMail.writeLogsToLocalFile(" -> " + file_name + " STATUS -> "+status);
-							SendMail.writeLogsToLocalFile("#	#	#	#	#	#	#	#");
-							System.out.println(" -> " + file_name + " STATUS -> "+status);
+							SendMail.writeLogsToLocalFile(" -> " + file_name + " STATUS: " + status);
+							System.out.println(file_name + " TRAN STATUS: ->  " + status);
 						}
+						SendMail.writeLogsToLocalFile("#	#	#	#	#	#	#	#");
+					} else {
+						String status = warehouse_load_count == -2 ? "ERR_TRAN"
+								: warehouse_load_count == -1 ? "FK_NOT_EXISTS" : "DUPLI&FK_NOT_EXISTS";
+						control_db.updateLogs(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, id_log, "FILE_STATUS",
+								status, false);
+						// Đồng thời chuyển file vừa rồi vào thục mục ERR_DIR
+						d_process.moveFile(file, ERR_DIR);
+						SendMail.writeLogsToLocalFile(" -> " + file_name + " STATUS -> " + status);
+						SendMail.writeLogsToLocalFile("#	#	#	#	#	#	#	#");
+						System.out.println(" -> " + file_name + " STATUS -> " + status);
+					}
 				} catch (SQLException | NumberFormatException | StringIndexOutOfBoundsException e) {
 					// File không đúng format thì TỰ DÔ MÀ SỬA :))
 					control_db.updateLogs(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, id_log, "FILE_STATUS",

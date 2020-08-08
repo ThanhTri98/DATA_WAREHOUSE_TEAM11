@@ -21,29 +21,30 @@ import javax.mail.internet.MimeBodyPart;
 import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeMultipart;
 
+import dao.ControlDB;
+
 public class SendMail {
+	// Local
 	public static String CURRENT_DATE = java.time.LocalDate.now().toString();
 	public static String CURRENT_TIME = java.time.LocalTime.now().toString().substring(0,
 			java.time.LocalTime.now().toString().indexOf("."));
-	public static String local_path = "C:\\WAREHOUSE\\LOGS_MAIL\\";
+	public static boolean AUTO_FLUSH = true;
 	static BufferedWriter bffWriter = null;
 	static FileWriter fWriter = null;
-	public static boolean AUTO_FLUSH = true;
+	// Email
+	private static MailConfig mail_config = new ControlDB().getMailConfig();
 
 	public static void setAUTO_FLUSH(boolean aUTO_FLUSH) {
 		AUTO_FLUSH = aUTO_FLUSH;
 	}
-	
 
 	public static void setBffWriter(BufferedWriter bffWriter) {
 		SendMail.bffWriter = bffWriter;
 	}
 
-
 	public static void setfWriter(FileWriter fWriter) {
 		SendMail.fWriter = fWriter;
 	}
-
 
 	public static void flushData() {
 		try {
@@ -64,7 +65,7 @@ public class SendMail {
 	}
 
 	public static void writeLogsToLocalFile(String content) {
-		File file = new File(local_path + CURRENT_DATE + ".txt");
+		File file = new File(mail_config.getLocalPath() + CURRENT_DATE + ".txt");
 		try {
 			if (!file.exists()) {
 				file.createNewFile();
@@ -89,22 +90,22 @@ public class SendMail {
 		// 1) get the session object
 		Properties props = new Properties();
 		props.put("mail.smtp.auth", "true");
-		props.put("mail.smtp.host", MailConfig.HOST_NAME);
-		props.put("mail.smtp.socketFactory.port", MailConfig.SSL_PORT);
+		props.put("mail.smtp.host", mail_config.getHostName());
+		props.put("mail.smtp.socketFactory.port", mail_config.getSslPort());
 		props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
-		props.put("mail.smtp.port", MailConfig.SSL_PORT);
+		props.put("mail.smtp.port", mail_config.getSslPort());
 
 		Session session = Session.getDefaultInstance(props, new javax.mail.Authenticator() {
 			protected PasswordAuthentication getPasswordAuthentication() {
-				return new PasswordAuthentication(MailConfig.APP_EMAIL, MailConfig.APP_PASSWORD);
+				return new PasswordAuthentication(mail_config.getAppEmail(), mail_config.getAppPassword());
 			}
 		});
 
 		// 2) compose message
 		try {
 			MimeMessage message = new MimeMessage(session);
-			message.setFrom(new InternetAddress(MailConfig.APP_EMAIL));
-			message.addRecipient(Message.RecipientType.TO, new InternetAddress(MailConfig.RECEIVE_EMAIL));
+			message.setFrom(new InternetAddress(mail_config.getAppEmail()));
+			message.addRecipient(Message.RecipientType.TO, new InternetAddress(mail_config.getReceiveEmail()));
 			message.setSubject("DATA WAREHOUSE REPORT - " + CURRENT_DATE);
 
 			// 3) create MimeBodyPart object and set your message text
@@ -114,10 +115,10 @@ public class SendMail {
 			// 4) create new MimeBodyPart object and set DataHandler object to this object
 			MimeBodyPart messageBodyPart2 = new MimeBodyPart();
 
-			String filename = local_path + CURRENT_DATE + ".txt";
+			String filename = mail_config.getLocalPath() + CURRENT_DATE + ".txt";
 			DataSource source = new FileDataSource(filename);
 			messageBodyPart2.setDataHandler(new DataHandler(source));
-			messageBodyPart2.setFileName(filename);
+			messageBodyPart2.setFileName(CURRENT_DATE + ".txt");
 
 			// 5) create Multipart object and add MimeBodyPart objects to this object
 			Multipart multipart = new MimeMultipart();

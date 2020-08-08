@@ -55,20 +55,28 @@ public class DataProcess {
 		}
 		return values;
 	}
-
+	public static void main(String[] args) {
+		System.out.println(new DataProcess().readValuesTXT(new File(
+				"C:\\WAREHOUSE\\ERROR_DIR\\CLASS\\lophoc_sang_nhom5_2020.csv"),
+				"ma_lh,ma_mh,nam_hoc"));
+	}
 	public String readValuesTXT(File s_file, String column_list) {
 		if (!s_file.exists()) {
 			return null;
 		}
-		int count_field = new StringTokenizer(column_list, ",").countTokens()+1;
+		int count_field = new StringTokenizer(column_list, ",").countTokens() + 1;
 		int countLines = 0;
 		String values = "";
 		String delim = "|"; // hoặc \t
 		try {
 			BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(s_file), "utf8"));
 			String line = bReader.readLine();
-			if (line.indexOf("\t") != -1) {
-				delim = "\t";
+			if (s_file.getName().endsWith(".csv")) {
+				delim = ",";
+			} else {
+				if (line.indexOf("\t") != -1) {
+					delim = "\t";
+				}
 			}
 			// Kiểm tra xem tổng số field trong file có đúng format
 			if (new StringTokenizer(line, delim).countTokens() != count_field) {
@@ -99,7 +107,7 @@ public class DataProcess {
 		} catch (NoSuchElementException | IOException e) {
 			e.printStackTrace();
 			return null;
-		}finally {
+		} finally {
 			dropFirstField = false;
 		}
 	}
@@ -125,7 +133,7 @@ public class DataProcess {
 			XSSFSheet sheet = workBooks.getSheetAt(0);
 			totalRows = sheet.getLastRowNum();
 			Row rowCheck = sheet.getRow(0); // Lấy ra hàng đầu tiên
-			if(rowCheck==null) {
+			if (rowCheck == null) {
 				SendMail.writeLogsToLocalFile(" -> FILE NOT FORMATED!!!: " + s_file.getName());
 				return null;
 			}
@@ -246,11 +254,6 @@ public class DataProcess {
 		return result;
 	}
 
-	public static void main(String[] args) {
-		System.out.println(new DataProcess().readValuesTXT(
-				new File("C:\\Users\\VõThanh\\Desktop\\COURSES\\WAREHOUSE\\DIR\\SUBJECT_REGIS\\dangky_sang_nhom11_2020.txt"),
-				"ma_dk,mssv,ma_lh,ngay_dk"));
-	}
 
 	public int transferData(ResultSet data_staging, int id_log, String column_list, String process_function) {
 		SendMail.writeLogsToLocalFile("#	#	#	#	#	#	#	#");
@@ -309,10 +312,11 @@ public class DataProcess {
 						dupli += value + " ";
 					} else {
 						try {
-							int value = Integer.parseInt(data_staging.getString(col_arr[i])); // Nếu field đó kiểu dữ liệu là int
+							int value = Integer.parseInt(data_staging.getString(col_arr[i])); // Nếu field đó kiểu dữ
+																								// liệu là int
 							cst.setInt((i + 1), value);
 							dupli += value + " ";
-						}catch (NumberFormatException e) {
+						} catch (NumberFormatException e) {
 							continue loop;
 						}
 					}
@@ -325,7 +329,7 @@ public class DataProcess {
 					String OUTPUT = cst.getString(param_arr.length);
 					if (OUTPUT.equalsIgnoreCase("DUPLICATE DATA")) {
 						duplicateLine++;
-						SendMail.writeLogsToLocalFile(" -> " + dupli + " STATUS: "+ OUTPUT);
+						SendMail.writeLogsToLocalFile(" -> " + dupli + " STATUS: " + OUTPUT);
 					} else {// Khóa không tồn tại
 						fk_notExists++;
 						SendMail.writeLogsToLocalFile(" -> " + OUTPUT);
@@ -338,22 +342,24 @@ public class DataProcess {
 				return result;
 			} else {// Ngược lại có nghĩa là result = 0
 					// Không flush
-				if(duplicateLine==totalLine) {
+				if (duplicateLine == totalLine) {
 					SendMail.setBffWriter(null);
 					SendMail.setfWriter(null);
 					SendMail.setAUTO_FLUSH(true);
 					return 0; // File duplicate
-				}else if(fk_notExists==totalLine) {
+				} else if (fk_notExists == totalLine) {
 					SendMail.setBffWriter(null);
 					SendMail.setfWriter(null);
 					SendMail.setAUTO_FLUSH(true);
-					return -1; // FK NOT EXISTS (Tất cả các dòng dữ liệu có khóa ngoại không tồn tại trong bảng dim)
-				}else if(errorLine==totalLine) {
+					return -1; // FK NOT EXISTS (Tất cả các dòng dữ liệu có khóa ngoại không tồn tại trong bảng
+								// dim)
+				} else if (errorLine == totalLine) {
 					SendMail.setBffWriter(null);
 					SendMail.setfWriter(null);
 					SendMail.setAUTO_FLUSH(true);
-					return -2; // Error_tran ( Tất cả các dòng dữ liệu có trường không đúng định dạng vd: date 2012/1999)
-				}else {
+					return -2; // Error_tran ( Tất cả các dòng dữ liệu có trường không đúng định dạng vd: date
+								// 2012/1999)
+				} else {
 					// FILE NHIEU LOI QUA
 					SendMail.setAUTO_FLUSH(true);
 					return -3;

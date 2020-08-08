@@ -6,6 +6,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import modal.Configuration;
+import modal.MailConfig;
 import util.ConnectionDB;
 
 public class ControlDB {
@@ -36,6 +37,32 @@ public class ControlDB {
 			return null;
 		} catch (SQLException e) {
 			e.printStackTrace();
+			return null;
+		} finally {
+			try {
+				if (pst != null)
+					pst.close();
+				if (rs != null)
+					rs.close();
+				if (connection != null)
+					connection.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public MailConfig getMailConfig() {
+		try {
+			connection = ConnectionDB.createConnection(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS);
+			String sql = "SELECT * FROM EMAIL_CONFIG";
+			pst = connection.prepareStatement(sql);
+			rs = pst.executeQuery();
+			if(rs.next()) {
+				return new MailConfig().getMailConfig(rs);
+			}
+			return null;
+		} catch (SQLException e) {
 			return null;
 		} finally {
 			try {
