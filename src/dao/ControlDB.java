@@ -4,9 +4,13 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
 import modal.Configuration;
 import modal.MailConfig;
+import modal.Process;
+import modal.SCP;
 import util.ConnectionDB;
 
 public class ControlDB {
@@ -15,7 +19,6 @@ public class ControlDB {
 	private String CONTROL_DB_PASS;
 	Connection connection = null;
 	PreparedStatement pst = null;
-	ResultSet rs = null;
 	String sql;
 
 	public ControlDB() {
@@ -24,15 +27,37 @@ public class ControlDB {
 		this.CONTROL_DB_PASS = "";
 	}
 
-	public Configuration getConfig(int id_config) {
+	public List<modal.Process> getListProcess() {
+		ResultSet rs_process = null;
 		try {
-			sql = "SELECT * FROM CONFIGURATION WHERE CONFIG_ID=?";
-			connection = ConnectionDB.createConnection(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS);
-			pst = connection.prepareStatement(sql);
-			pst.setInt(1, id_config);
-			rs = pst.executeQuery();
-			if (rs.next()) {
-				return new Configuration().getConfiguration(rs);
+			List<modal.Process> listProcess = new ArrayList<modal.Process>();
+			rs_process = selectAllField(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, "PROCESS", null, null, null);
+			while (rs_process.next()) {
+				listProcess.add(new Process().getProcess(rs_process));
+			}
+			return listProcess.size() != 0 ? listProcess : null;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return null;
+		} finally {
+			try {
+				if (rs_process != null)
+					rs_process.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public Configuration getConfig(int id_config) {
+		ResultSet rs_config = null;
+		try {
+			rs_config = selectAllField(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, "CONFIGURATION", "CONFIG_ID",
+					id_config + "", "true");
+			if (rs_config.isClosed())
+				System.out.println("dong");
+			if (rs_config.next()) {
+				return new Configuration().getConfiguration(rs_config);
 			}
 			return null;
 		} catch (SQLException e) {
@@ -40,12 +65,30 @@ public class ControlDB {
 			return null;
 		} finally {
 			try {
-				if (pst != null)
-					pst.close();
-				if (rs != null)
-					rs.close();
-				if (connection != null)
-					connection.close();
+				if (rs_config != null)
+					rs_config.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public SCP getSCP(int id_config) {
+		ResultSet rs_scp = null;
+		try {
+			rs_scp = selectAllField(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, "SCP", "CONFIG_ID",
+					id_config + "", "true");
+			if (rs_scp.next()) {
+				return new SCP().getSCP(rs_scp);
+			}
+			return null;
+		} catch (SQLException e) {
+			e.printStackTrace();
+			return null;
+		} finally {
+			try {
+				if (rs_scp != null)
+					rs_scp.close();
 			} catch (SQLException e) {
 				e.printStackTrace();
 			}
@@ -53,25 +96,20 @@ public class ControlDB {
 	}
 
 	public MailConfig getMailConfig() {
+		ResultSet rs_mail = null;
 		try {
-			connection = ConnectionDB.createConnection(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS);
-			String sql = "SELECT * FROM EMAIL_CONFIG";
-			pst = connection.prepareStatement(sql);
-			rs = pst.executeQuery();
-			if(rs.next()) {
-				return new MailConfig().getMailConfig(rs);
+			rs_mail = selectAllField(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, "EMAIL_CONFIG", null, null,
+					null);
+			if (rs_mail.next()) {
+				return new MailConfig().getMailConfig(rs_mail);
 			}
 			return null;
 		} catch (SQLException e) {
 			return null;
 		} finally {
 			try {
-				if (pst != null)
-					pst.close();
-				if (rs != null)
-					rs.close();
-				if (connection != null)
-					connection.close();
+				if (rs_mail != null)
+					rs_mail.close();
 			} catch (SQLException e) {
 				e.printStackTrace();
 			}
@@ -143,6 +181,7 @@ public class ControlDB {
 
 	public ResultSet selectOneField(String db_name, String user_name, String password, String table_name, String field,
 			String condition_name, String condition_value, boolean isInteger) {
+		ResultSet rs = null;
 		try {
 			connection = ConnectionDB.createConnection(db_name, user_name, password);
 			if (condition_name == null) {
@@ -161,6 +200,15 @@ public class ControlDB {
 			return rs;
 		} catch (Exception e) {
 			return null;
+		} finally {
+			try {
+				if (pst != null)
+					pst.close();
+				if (connection != null)
+					connection.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
 		}
 	}
 
@@ -185,12 +233,11 @@ public class ControlDB {
 
 	}
 
-	public boolean updateLogs(String db_name, String user_name, String password, int id_logs, String name_field,
-			String value, boolean isInteger) {
+	public void updateLogs(int id_logs, String name_field, String value, boolean isInteger) {
 
 		sql = "UPDATE LOGS SET " + name_field + "=?,FILE_TIMESTAMP=NOW() WHERE ID=?";
 		try {
-			connection = ConnectionDB.createConnection(db_name, user_name, password);
+			connection = ConnectionDB.createConnection(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS);
 			pst = connection.prepareStatement(sql);
 			if (isInteger) {
 				pst.setInt(1, Integer.parseInt(value));
@@ -198,6 +245,29 @@ public class ControlDB {
 				pst.setString(1, value);
 			}
 			pst.setInt(2, id_logs);
+			pst.executeUpdate();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				if (pst != null)
+					pst.close();
+				if (connection != null)
+					connection.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public boolean updateProcess(int config_id, String value) {
+		String time = value.equals(Process.STATUS_EXTRACT) ? "TIME_DOWNLOAD" : "TIME_EXTRACT";
+		sql = "UPDATE PROCESS SET PROCESS_STATUS=?," + time + "=NOW() WHERE CONFIG_ID=?";
+		try {
+			connection = ConnectionDB.createConnection(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS);
+			pst = connection.prepareStatement(sql);
+			pst.setString(1, value);
+			pst.setInt(2, config_id);
 			return pst.executeUpdate() > 0;
 		} catch (SQLException e) {
 			e.printStackTrace();
@@ -206,8 +276,34 @@ public class ControlDB {
 			try {
 				if (pst != null)
 					pst.close();
-				if (rs != null)
-					rs.close();
+				if (connection != null)
+					connection.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public String getProcessStatus(int config_id) {
+		ResultSet rs_status = null;
+		try {
+			connection = ConnectionDB.createConnection(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS);
+			sql = "SELECT PROCESS_STATUS FROM PROCESS WHERE CONFIG_ID=?";
+			pst = connection.prepareStatement(sql);
+			pst.setInt(1, config_id);
+			rs_status = pst.executeQuery();
+			if (rs_status.next()) {
+				return rs_status.getString(1);
+			}
+			return null;
+		} catch (Exception e) {
+			return null;
+		} finally {
+			try {
+				if (rs_status != null)
+					rs_status.close();
+				if (pst != null)
+					pst.close();
 				if (connection != null)
 					connection.close();
 			} catch (SQLException e) {

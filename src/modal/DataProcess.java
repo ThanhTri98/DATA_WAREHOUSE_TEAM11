@@ -55,13 +55,9 @@ public class DataProcess {
 		}
 		return values;
 	}
-	public static void main(String[] args) {
-		System.out.println(new DataProcess().readValuesTXT(new File(
-				"C:\\WAREHOUSE\\ERROR_DIR\\CLASS\\lophoc_sang_nhom5_2020.csv"),
-				"ma_lh,ma_mh,nam_hoc"));
-	}
 	public String readValuesTXT(File s_file, String column_list) {
 		if (!s_file.exists()) {
+			SendMail.writeLogsToLocalFile(" --> FILE NOT FOUND!!!: " + s_file.getName());
 			return null;
 		}
 		int count_field = new StringTokenizer(column_list, ",").countTokens() + 1;

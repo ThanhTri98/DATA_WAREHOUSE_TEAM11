@@ -19,16 +19,19 @@ public class DataWarehouse {
 			STAGING_PASS, STAGING_TABLE;
 	// LOG
 	final static String COLUMN_LIST_LOG = "FILE_NAME,CONFIG_ID,FILE_STATUS,STAGING_LOAD_COUNT,WAREHOUSE_LOAD_COUNT,FILE_TIMESTAMP";
+	// PROCESS
+	private String PROCESS_STATUS;
 	//
 	DataProcess d_process;
 	ControlDB control_db;
 
 	public DataWarehouse(int id_config) {
+		d_process = new DataProcess();
 		control_db = new ControlDB();
 		CONTROL_DB_NAME = control_db.getCONTROL_DB_NAME();
 		CONTROL_DB_USER = control_db.getCONTROL_DB_USER();
 		CONTROL_DB_PASS = control_db.getCONTROL_DB_PASS();
-		// config
+		// CONFIG
 		Configuration CONF = control_db.getConfig(id_config);
 		CONFIG_ID = CONF.getIdConfig();
 		IMPORT_DIR = CONF.getImportDir();
@@ -44,13 +47,14 @@ public class DataWarehouse {
 		STAGING_USER = CONF.getStagingUser();
 		STAGING_PASS = CONF.getStagingPass();
 		STAGING_TABLE = CONF.getStagingTable();
-		d_process = new DataProcess();
+		// PROCESS
+		PROCESS_STATUS = control_db.getProcessStatus(CONFIG_ID);
 		SendMail.writeLogsToLocalFile("#" + SendMail.CURRENT_DATE + " " + SendMail.CURRENT_TIME);
 	}
 
 	public static void main(String[] args) {
 		try {
-			DataWarehouse d_warehouse = new DataWarehouse(4);
+			DataWarehouse d_warehouse = new DataWarehouse(Integer.parseInt(args[0]));
 			d_warehouse.downloadFile();
 			d_warehouse.ExtractToDB();
 			if (d_warehouse.CONFIG_ID == 4) {
@@ -64,19 +68,22 @@ public class DataWarehouse {
 
 //I. funcDownload, funcInsertLog
 	public void downloadFile() {
+		// Kiểm tra xem trạng thái của config hiện tại có phải là DOWNLOAD không
+		// Nếu phải thì tiến hành down ngược lại break;
+		if (!PROCESS_STATUS.equals(Process.STATUS_DOWNLOAD))
+			return;
 		System.out.println("Wating....");
 		// 1.0 Kết nối đến DB controldb -> vào table scp get các thông tin cho việc
 		// download file từ server về local
-		ResultSet rs_scp = control_db.selectAllField(control_db.getCONTROL_DB_NAME(), control_db.getCONTROL_DB_USER(),
-				control_db.getCONTROL_DB_PASS(), "SCP", "CONFIG_ID", CONFIG_ID + "", "true");
-//		 1.1Lưu vào đối tượng SCP
-		SCP scp = new SCP().getSCP(rs_scp);
-		if (scp == null) { // Cho trường hợp không download file Subject
-			System.out.println("Null download");
+		// 1.1 Lưu vào đối tượng SCP
+		SCP scp = control_db.getSCP(CONFIG_ID);
+		if (scp == null) {
+			SendMail.writeLogsToLocalFile("DOWNLOAD FAIL");
+			System.out.println("DOWNLOAD FAIL");
 			return;
 		}
 		// 1.2 Kết nối đến DB controldb -> vào table logs lấy ra danh sách các file_name
-		// (không down lại file)
+		// (không tải lại file)
 //		String not_match = "";
 //		ResultSet rs_file_name = control_db.selectOneField(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, "LOGS",
 //				"FILE_NAME", null, null, false);
@@ -97,21 +104,20 @@ public class DataWarehouse {
 			SendMail.writeLogsToLocalFile("DOWNLOAD FILE - " + SendMail.CURRENT_TIME);
 		} else {
 			SendMail.writeLogsToLocalFile("!!!DOWNLOAD FAIL");
-			System.out.println("Download Fail!!!"); // send mail
+			System.out.println("!!!DOWNLOAD FAIL"); // send mail
 		}
 
-		try {
-			rs_scp.close();
+//		try {
 //			rs_file_name.close();
-		} catch (SQLException e) {
-			SendMail.writeLogsToLocalFile("  !!!" + e.getMessage());
-			e.printStackTrace();
-		}
+//		} catch (SQLException e) {
+//			SendMail.writeLogsToLocalFile("  !!!" + e.getMessage());
+//			e.printStackTrace();
+//		}
 	}
 
 	public void insertLog(String folder, String file_status) {
-		// 1.6 Mở folder và kiểm tra folder tồn tại hay không?
 		System.out.println("File downloaded");
+		// 1.6 Mở folder và kiểm tra folder tồn tại hay không?
 		File fd = new File(folder);
 		if (!fd.exists())
 			return;
@@ -146,11 +152,18 @@ public class DataWarehouse {
 				}
 			}
 		}
+		if (control_db.updateProcess(CONFIG_ID, Process.STATUS_EXTRACT))
+			PROCESS_STATUS = Process.STATUS_EXTRACT;
+
 		SendMail.writeLogsToLocalFile("INSERT LOG: ER - " + SendMail.CURRENT_TIME);
 	}
 
 	// II,III ExtractToStaging --> Transform --> Warehouse
 	public void ExtractToDB() {
+		// Kiểm tra xem trạng thái của config hiện tại có phải là EXTRACT không
+		// Nếu phải thì tiến hành EXTRACT ngược lại break;
+		if (!PROCESS_STATUS.equals(Process.STATUS_EXTRACT))
+			return;
 		SendMail.writeLogsToLocalFile("EXTRACT TO DATABASE - " + SendMail.CURRENT_TIME);
 		System.out.println("Extract Staging...");
 		// 2.0 Lấy ra tất cả các trường có file_status=ER và lưu vào ResultSet
@@ -181,7 +194,7 @@ public class DataWarehouse {
 					values = d_process.readValuesTXT(file, COLUMN_LIST);
 				}
 				try {
-					// Tách lấy số dòng đọc lên từ file
+					// Tách lấy số dòng đọc lên từ file và chuỗi values
 					if (values != null && !values.isEmpty()) {
 						int index = values.indexOf(DataProcess.DELIM_COUNT_LINES);
 						countLines = Integer.parseInt(values.substring(0, index));
@@ -194,8 +207,7 @@ public class DataWarehouse {
 					control_db.insertValues(STAGING_DB_NAME, STAGING_USER, STAGING_PASS, STAGING_TABLE, COLUMN_LIST,
 							values);
 					// Cập nhật số dòng vừa load vào db_staging
-					control_db.updateLogs(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, id_log,
-							"STAGING_LOAD_COUNT", countLines + "", true);
+					control_db.updateLogs(id_log, "STAGING_LOAD_COUNT", countLines + "", true);
 					System.out.println(file_name + "--> Transforming...");
 					// Lấy toàn bộ bảng ghi trong table student từ db staging
 					ResultSet data_staging = control_db.selectAllField(STAGING_DB_NAME, STAGING_USER, STAGING_PASS,
@@ -211,11 +223,9 @@ public class DataWarehouse {
 						// Cập nhật file_status = SU
 						String status = warehouse_load_count == countLines ? "SU"
 								: warehouse_load_count == 0 ? "FILE_DUPLICATE" : "MISSING_TRAN";
-						control_db.updateLogs(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, id_log, "FILE_STATUS",
-								status, false);
+						control_db.updateLogs(id_log, "FILE_STATUS", status, false);
 						// Cập nhật số dòng load vào table student trong dw
-						control_db.updateLogs(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, id_log,
-								"WAREHOUSE_LOAD_COUNT", warehouse_load_count + "", true);
+						control_db.updateLogs(id_log, "WAREHOUSE_LOAD_COUNT", warehouse_load_count + "", true);
 						// xong thì tiến hành chuyển file chứa dữ liệu vừa rồi qua thư mục SUCCESS_DIR
 						d_process.moveFile(file, SU_DIR);
 						if (status.equals("MISSING_TRAN")) {
@@ -236,8 +246,7 @@ public class DataWarehouse {
 					} else {
 						String status = warehouse_load_count == -2 ? "ERR_TRAN"
 								: warehouse_load_count == -1 ? "FK_NOT_EXISTS" : "DUPLI&FK_NOT_EXISTS";
-						control_db.updateLogs(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, id_log, "FILE_STATUS",
-								status, false);
+						control_db.updateLogs(id_log, "FILE_STATUS", status, false);
 						// Đồng thời chuyển file vừa rồi vào thục mục ERR_DIR
 						d_process.moveFile(file, ERR_DIR);
 						SendMail.writeLogsToLocalFile(" -> " + file_name + " STATUS -> " + status);
@@ -246,8 +255,7 @@ public class DataWarehouse {
 					}
 				} catch (SQLException | NumberFormatException | StringIndexOutOfBoundsException e) {
 					// File không đúng format thì TỰ DÔ MÀ SỬA :))
-					control_db.updateLogs(CONTROL_DB_NAME, CONTROL_DB_USER, CONTROL_DB_PASS, id_log, "FILE_STATUS",
-							"ERR_STAGING", false);
+					control_db.updateLogs(id_log, "FILE_STATUS", "ERR_STAGING", false);
 					SendMail.writeLogsToLocalFile(" -> " + file_name + " STATUS: ERR_STAGING");
 					SendMail.writeLogsToLocalFile(" -> " + file_name + " !!!ERR " + e.getMessage());
 					SendMail.writeLogsToLocalFile("#	#	#	#	#	#	#	#");
@@ -257,6 +265,8 @@ public class DataWarehouse {
 					continue;
 				}
 			}
+			if (control_db.updateProcess(CONFIG_ID, Process.STATUS_DOWNLOAD))
+				PROCESS_STATUS = Process.STATUS_DOWNLOAD;
 			System.out.println("Complete");
 		} catch (SQLException e) {
 			e.printStackTrace();
